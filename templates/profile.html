@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+{% block title %}Profile — MET Ride{% endblock %}
+
+{% block content %}
+<h1 class="page-title">My Profile</h1>
+<p class="page-subtitle">Manage your account details and preferences.</p>
+
+<div class="profile-grid">
+
+  <!-- Left: Avatar & Summary -->
+  <div class="card">
+    <form id="profile-form" action="{{ url_for('main.update_profile') }}" method="POST" enctype="multipart/form-data">
+      <div class="avatar-section" style="margin-bottom:1.5rem;">
+        <div class="avatar-wrap">
+          {% if user and user.get('profile_pic') %}
+            <img class="avatar-img" src="{{ user.profile_pic }}" alt="Profile picture" id="avatar-preview" />
+          {% else %}
+            <div class="avatar-placeholder" id="avatar-placeholder">
+              {{ (user.get('name', 'U') or 'U')[0].upper() }}
+            </div>
+          {% endif %}
+          <label class="avatar-edit" for="profile-pic-input" title="Change photo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </label>
+          <input id="profile-pic-input" name="profile_pic" type="file" accept="image/*"
+                 class="hidden" onchange="previewAvatar(this)" />
+        </div>
+
+        <div>
+          <div class="profile-name">{{ user.get('name', session.get('email', '')) }}</div>
+          <div class="profile-email">{{ user.get('email', '') }}</div>
+          {% if user and user.get('ratings') %}
+          <div class="stars mt-1" title="{{ (user.ratings|sum / user.ratings|length)|round(1) }} average rating">
+            {% set avg = (user.ratings|sum / user.ratings|length)|round(0)|int %}
+            {% for i in range(1, 6) %}
+              <span class="star {% if i <= avg %}filled{% endif %}">★</span>
+            {% endfor %}
+            <span class="text-muted text-sm" style="margin-left:4px">
+              ({{ user.ratings|length }} reviews)
+            </span>
+          </div>
+          {% else %}
+          <div class="text-muted text-sm mt-1">No ratings yet</div>
+          {% endif %}
+        </div>
+
+        <!-- Verified badge -->
+        <div>
+          {% if user and user.get('is_verified') %}
+            <span class="status-badge status-verified">✓ Verified</span>
+          {% else %}
+            <span class="status-badge status-pending">⏳ Pending Verification</span>
+            <p class="text-sm text-muted mt-1" style="max-width:220px;text-align:center;">
+              Upload your ID card below so an admin can verify you.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="section-divider"></div>
+
+      <!-- Form Fields -->
+      <div class="form-group">
+        <label class="form-label" for="p-name">Full Name</label>
+        <input class="form-input" type="text" id="p-name" name="name"
+               value="{{ user.get('name', '') }}" placeholder="Your full name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="p-dept">Department</label>
+        <select class="form-select" id="p-dept" name="department">
+          <option value="">Select department</option>
+          {% for dept in ['Computer Engineering', 'Information Technology', 'Mechanical Engineering',
+                          'Civil Engineering', 'Electronics & Telecommunication',
+                          'MCA', 'MBA', 'BCA', 'BBA', 'Other'] %}
+          <option value="{{ dept }}" {% if user and user.get('department') == dept %}selected{% endif %}>
+            {{ dept }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="p-upi">UPI ID (for fare collection)</label>
+        <input class="form-input" type="text" id="p-upi" name="upi_id"
+               value="{{ user.get('upi_id', '') }}" placeholder="yourname@upi" />
+      </div>
+
+      <div class="section-divider"></div>
+
+      <!-- ID Card Upload -->
+      <div class="form-group">
+        <label class="form-label" for="id-card-input">College ID Card</label>
+        {% if user and user.get('id_card_url') %}
+          <p class="text-sm text-muted mb-1">✓ ID uploaded. Re-upload to replace.</p>
+        {% endif %}
+        <input class="form-input" type="file" id="id-card-input" name="id_card"
+               accept="image/*,.pdf" />
+        <span class="form-help">Upload a photo/scan of your college ID card for verification.</span>
+      </div>
+
+      <button class="btn btn-primary btn-full mt-2" type="submit">
+        Save Changes
+      </button>
+    </form>
+  </div>
+
+  {% if session.get('role') in ['admin', 'super_admin'] %}
+  <!-- Admin Tools -->
+  <div class="card mt-2">
+    <h2 class="section-title">👑 Admin Management</h2>
+    <div class="form-group" style="display:flex;gap:.5rem;">
+      <input type="email" id="admin-search-email" class="form-control" placeholder="user@met.edu" />
+      <button class="btn btn-secondary" onclick="searchUserForAdmin()">Search</button>
+    </div>
+    <div id="admin-search-result" style="margin-top:1rem;"></div>
+  </div>
+
+  <div class="card mt-2">
+    <h2 class="section-title">Current Admins</h2>
+    <div class="data-table-wrapper">
+      <table class="data-table" style="width:100%; text-align:left;">
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Action</th></tr></thead>
+        <tbody id="admin-list-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Right: Stats + Ride History -->
+  <div style="display:flex; flex-direction:column; gap:1rem;">
+
+    <!-- Quick stats -->
+    <div class="stats-grid" style="grid-template-columns:repeat(2,1fr);">
+      <div class="stat-card" onclick="toggleProfileCard('rides-posted')" style="cursor:pointer;">
+        <div class="stat-icon">🚗</div>
+        <div class="stat-value" id="ps-rides">—</div>
+        <div class="stat-label">Rides Posted</div>
+      </div>
+      <div class="stat-card" onclick="toggleProfileCard('rides-joined')" style="cursor:pointer;">
+        <div class="stat-icon">👥</div>
+        <div class="stat-value" id="ps-requests">—</div>
+        <div class="stat-label">Rides Joined</div>
+      </div>
+      <div class="stat-card" onclick="toggleProfileCard('fuel-saved')" style="cursor:pointer;">
+        <div class="stat-icon">🌿</div>
+        <div class="stat-value" id="ps-fuel">0 L</div>
+        <div class="stat-label">Fuel Saved</div>
+      </div>
+      <div class="stat-card" onclick="toggleProfileCard('my-rating')" style="cursor:pointer;">
+        <div class="stat-icon">⭐</div>
+        <div class="stat-value" id="ps-rating">—</div>
+        <div class="stat-label">Your Rating</div>
+      </div>
+      
+      <div class="stat-detail-panel hidden" id="prof-detail-rides-posted"></div>
+      <div class="stat-detail-panel hidden" id="prof-detail-rides-joined"></div>
+      <div class="stat-detail-panel hidden" id="prof-detail-fuel-saved"></div>
+      <div class="stat-detail-panel hidden" id="prof-detail-my-rating"></div>
+    </div>
+
+    <!-- Account Details -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Account Info</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.75rem;font-size:.875rem;">
+        <div style="display:flex;justify-content:space-between;">
+          <span class="text-muted">Email</span>
+          <span>{{ user.get('email', '') }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span class="text-muted">Institute</span>
+          <span>{{ user.get('institute', 'MET BKC') }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span class="text-muted">Admin Access</span>
+          <span>{% if user and user.get('is_admin') %}✓ Yes{% else %}No{% endif %}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="card" style="border-color:rgba(239,68,68,0.2);">
+      <div class="card-header">
+        <span class="card-title" style="color:var(--brand-danger)">⚠ Danger Zone</span>
+      </div>
+      <p class="text-sm text-muted mb-1">These actions are irreversible.</p>
+      <a href="{{ url_for('auth.logout') }}" class="btn btn-danger btn-sm">
+        Sign Out of All Devices
+      </a>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function previewAvatar(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const placeholder = document.getElementById("avatar-placeholder");
+      if (placeholder) placeholder.style.display = "none";
+      let img = document.getElementById("avatar-preview");
+      if (!img) {
+        img = document.createElement("img");
+        img.id = "avatar-preview";
+        img.className = "avatar-img";
+        img.alt = "Profile preview";
+        document.querySelector(".avatar-wrap").prepend(img);
+      }
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+document.getElementById("profile-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+
+  fetch("/api/profile", {
+    method: "PUT",
+    body: fd
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      alert("Profile updated successfully!");
+      location.reload();
+    } else {
+      alert("Error: " + d.message);
+    }
+  });
+});
+
+async function searchUserForAdmin() {
+  const email = document.getElementById('admin-search-email').value.trim();
+  const res = await fetch('/admin/search-user', {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email})
+  });
+  const d = await res.json();
+  const resultDiv = document.getElementById('admin-search-result');
+  if (d.found) {
+    resultDiv.innerHTML = `
+      <div class="admin-found-user" style="margin-bottom:.5rem; font-size:.9rem;">
+        Found: <strong>${d.name}</strong> (${d.email}) — Role: ${d.role}
+        <input type="hidden" id="grant-user-id" value="${d.user_id}">
+      </div>
+      <div class="form-group" style="margin-top:.75rem">
+        <label class="form-label text-sm">Set Password</label>
+        <input class="form-input" type="password" id="grant-password" placeholder="Min 8 chars">
+        <input class="form-input" type="password" id="grant-confirm" placeholder="Confirm password" style="margin-top:.5rem">
+      </div>
+      <button class="btn btn-primary btn-sm mt-2" onclick="grantAdminAccess()">
+        ✅ Grant Admin Access
+      </button>`;
+  } else {
+    resultDiv.innerHTML = '<p class="text-danger" style="margin:0;">No user found.</p>';
+  }
+}
+
+async function grantAdminAccess() {
+  const user_id  = document.getElementById('grant-user-id').value;
+  const password = document.getElementById('grant-password').value;
+  const confirm  = document.getElementById('grant-confirm').value;
+  if (password !== confirm) { if(typeof showToast === 'function') showToast('Passwords do not match', 'danger'); else alert('Passwords do not match'); return; }
+  if (password.length < 8)  { if(typeof showToast === 'function') showToast('Password min 8 chars', 'danger'); else alert('Password min 8 chars'); return; }
+  const res = await fetch('/admin/grant-admin', {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({user_id, password, confirm_password: confirm})
+  });
+  const d = await res.json();
+  if(typeof showToast === 'function') showToast(d.message, d.success ? 'success' : 'danger');
+  else alert(d.message);
+  
+  if (d.success) { loadAdminList(); document.getElementById('admin-search-result').innerHTML = ''; }
+}
+
+async function loadAdminList() {
+  const table = document.getElementById('admin-list-table-body');
+  if(!table) return;
+  const res = await fetch('/admin/admin-list', { credentials:'same-origin' });
+  const admins = await res.json();
+  const isSuperAdmin = window.MET && window.MET.role === 'super_admin';
+  table.innerHTML = admins.map(a => `
+    <tr>
+      <td>${a.name}</td>
+      <td class="text-sm text-muted">${a.email}</td>
+      <td>${a.role === 'super_admin' ? '👑 Super Admin' : '🛡️ Admin'}</td>
+      <td>${(isSuperAdmin && a.role !== 'super_admin')
+        ? `<button class="btn btn-ghost btn-sm text-danger" onclick="revokeAdmin('${a._id}')">Revoke</button>`
+        : '—'}</td>
+    </tr>`).join('');
+}
+
+async function revokeAdmin(userId) {
+  if (!confirm('Revoke admin access?')) return;
+  const res = await fetch('/admin/revoke-admin', {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({user_id: userId})
+  });
+  const d = await res.json();
+  if(typeof showToast === 'function') showToast(d.message || 'Done', d.success ? 'success' : 'danger');
+  else alert(d.message || "Done");
+  if (d.success) loadAdminList();
+}
+
+// ── Profile Stat Details ──────────────────────────────────────────────────────
+const profStatCache = {};
+function toggleProfileCard(id) {
+  const panel = document.getElementById('prof-detail-' + id);
+  if(!panel) return;
+  const isOpen = !panel.classList.contains('hidden');
+  document.querySelectorAll('.stat-detail-panel').forEach(p => p.classList.add('hidden'));
+  if (isOpen) return;
+  panel.classList.remove('hidden');
+
+  fetchProfileStats(id, panel);
+}
+
+function fetchProfileStats(id, panel) {
+  const endpointMap = {
+      'my-rating': '/api/stats/my-rating',
+      'fuel-saved': '/api/stats/fuel-saved?user_only=true',
+      'rides-posted': '/api/profile/ride-stats',
+      'rides-joined': '/api/profile/ride-stats'
+  };
+  
+  if (profStatCache[id]) {
+      renderProfileStatPanel(id, panel, profStatCache[id]);
+      return;
+  }
+  
+  panel.innerHTML = '<div class="notif-skeleton"></div>';
+  fetch(endpointMap[id])
+      .then(r => r.json())
+      .then(d => {
+          if(id === 'rides-posted' || id === 'rides-joined') {
+             profStatCache['rides-posted'] = d;
+             profStatCache['rides-joined'] = d;
+          } else {
+             profStatCache[id] = d;
+          }
+          populateProfileStats(id, d);
+          renderProfileStatPanel(id, panel, d);
+      }).catch(()=> panel.innerHTML = "Error loading stats.");
+}
+
+function populateProfileStats(id, d) {
+  if(id === 'rides-posted' || id === 'rides-joined') {
+      const e1=document.getElementById("ps-rides"); if(e1) e1.textContent = d.posted;
+      const e2=document.getElementById("ps-requests"); if(e2) e2.textContent = d.joined;
+  }
+}
+
+function renderProfileStatPanel(id, panel, d) {
+    let html = "";
+    if (id === 'my-rating') {
+        html = `<div style="font-weight:600; margin-bottom:.5rem;">⭐ Your Rating Breakdown</div>
+        <div style="font-size:.85rem;">Average: ${d.average} (${d.total} total)<br>5★:${d.stars_5} | 4★:${d.stars_4} | 3★:${d.stars_3}</div>`;
+    } else if (id === 'fuel-saved') {
+        html = `<div style="font-weight:600; margin-bottom:.5rem;">🌿 Fuel Saved</div>
+        <div style="font-size:.85rem;">Today: ${d.today}L | Month: ${d.month}L | Total: ${d.all_time}L</div>`;
+    } else if (id === 'rides-posted') {
+        html = `<div style="font-weight:600; margin-bottom:.5rem;">🚗 Last 5 Rides Posted</div>`;
+        html += d.posted_list.length ? d.posted_list.map(r=> `<div class="text-sm border-b" style="padding:.25rem 0;">${r.source} → ${r.destination} <br><span class="text-xs text-muted">${r.date}</span></div>`).join('') : '<div class="text-sm">No rides posted.</div>';
+    } else if (id === 'rides-joined') {
+        html = `<div style="font-weight:600; margin-bottom:.5rem;">👥 Last 5 Rides Joined</div>`;
+        html += d.joined_list.length ? d.joined_list.map(r=> `<div class="text-sm border-b" style="padding:.25rem 0;">${r.source} → ${r.destination} <br><span class="text-xs text-muted">Driver: ${r.rider_name}</span></div>`).join('') : '<div class="text-sm">No rides joined.</div>';
+    }
+    panel.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadAdminList();
+    fetch('/api/profile/ride-stats').then(r=>r.json()).then(d=>{
+        profStatCache['rides-posted'] = d;
+        profStatCache['rides-joined'] = d;
+        populateProfileStats('rides-posted', d);
+    });
+    fetch('/api/stats/fuel-saved?user_only=true').then(r=>r.json()).then(d=>{
+        profStatCache['fuel-saved'] = d;
+        const fn = document.getElementById("ps-fuel"); if(fn) fn.textContent = d.all_time + " L";
+    });
+    fetch('/api/stats/my-rating').then(r=>r.json()).then(d=>{
+        profStatCache['my-rating'] = d;
+        const rt = document.getElementById("ps-rating"); if(rt) rt.textContent = d.average;
+    });
+});
+</script>
+<style>
+  .stat-detail-panel {
+    grid-column: 1 / -1;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 1rem;
+    margin-top: -.5rem;
+    animation: slideDown .2s ease;
+  }
+  @keyframes slideDown {
+    from { opacity:0; transform:translateY(-6px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+</style>
+{% endblock %}

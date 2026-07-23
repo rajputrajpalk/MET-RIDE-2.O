@@ -1,0 +1,43 @@
+# Environment
+.env
+*.env.local
+*.env.*.local
+
+# Sensitive files
+admin id.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Uploads (keep folder, ignore files)
+static/uploads/*
+!static/uploads/.gitkeep
+
+# MongoDB dump
+dump/
+
+# Git
+*.orig
+

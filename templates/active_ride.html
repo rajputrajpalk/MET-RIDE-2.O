@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+{% block title %}Active Ride — MET Ride{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  /* ── Active Ride Page — Midnight Drive Theme ────────────────────────────── */
+  .ar-page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Route Banner ────────────────────────────────────────────────────────── */
+  .ar-route-banner {
+    background: linear-gradient(135deg, #1a1d27 0%, #0f1117 100%);
+    border: 1px solid rgba(79, 142, 247, 0.25);
+    border-radius: 18px;
+    padding: 1.5rem 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .ar-route-label {
+    font-size: .78rem;
+    color: #4f8ef7;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: .35rem;
+  }
+  .ar-route-text {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #e8eaf6;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+  }
+  .ar-route-arrow {
+    color: #4f8ef7;
+    font-size: 1.5rem;
+  }
+  .ar-status-pill {
+    padding: .45rem 1.1rem;
+    border-radius: 99px;
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    border: 1px solid;
+  }
+  .ar-status-pill.active   { background: rgba(79,142,247,.12); border-color: #4f8ef7; color: #4f8ef7; }
+  .ar-status-pill.progress { background: rgba(34,197,94,.12);  border-color: #22c55e; color: #22c55e; }
+
+  /* ── LIVE badge ──────────────────────────────────────────────────────────── */
+  .live-badge-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    background: rgba(34,197,94,.12);
+    border: 1px solid #22c55e;
+    color: #22c55e;
+    border-radius: 99px;
+    padding: .3rem .85rem;
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  .live-dot {
+    width: 8px; height: 8px;
+    background: #22c55e;
+    border-radius: 50%;
+    animation: livePulse 1.4s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: .45; transform: scale(1.3); }
+  }
+
+  /* ── Two-column grid on desktop ─────────────────────────────────────────── */
+  .ar-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+  }
+  @media (max-width: 680px) {
+    .ar-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── OTP Card (both modes) ───────────────────────────────────────────────── */
+  .otp-card {
+    background: #1a1d27;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    padding: 1.75rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    text-align: center;
+  }
+  .otp-card-title {
+    font-size: .88rem;
+    font-weight: 700;
+    color: #a0a8c8;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  /* ── Passenger OTP display ───────────────────────────────────────────────── */
+  .otp-display-row {
+    display: flex;
+    gap: .65rem;
+    justify-content: center;
+  }
+  .otp-digit-box {
+    width: 58px;
+    height: 72px;
+    background: linear-gradient(160deg, #0f1117, #1a1d27);
+    border: 2px solid #4f8ef7;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 800;
+    color: #4f8ef7;
+    box-shadow: 0 0 18px rgba(79,142,247,.25);
+    animation: digitPop .5s cubic-bezier(.34,1.56,.64,1) both;
+  }
+  @keyframes digitPop {
+    from { transform: scale(.7); opacity: 0; }
+    to   { transform: scale(1);  opacity: 1; }
+  }
+  .otp-hint {
+    font-size: .82rem;
+    color: #6b7280;
+    max-width: 220px;
+  }
+  .otp-waiting-line {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .82rem;
+    color: #a0a8c8;
+  }
+  .otp-waiting-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #4f8ef7;
+    animation: livePulse 1.2s ease-in-out infinite;
+  }
+
+  /* ── Driver OTP numpad ───────────────────────────────────────────────────── */
+  .otp-boxes-row {
+    display: flex;
+    gap: .55rem;
+    justify-content: center;
+  }
+  .otp-box {
+    width: 52px;
+    height: 62px;
+    text-align: center;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #e8eaf6;
+    background: #0f1117;
+    border: 2px solid rgba(79,142,247,.35);
+    border-radius: 12px;
+    outline: none;
+    transition: border-color .18s, box-shadow .18s;
+    caret-color: transparent;
+  }
+  .otp-box:focus {
+    border-color: #4f8ef7;
+    box-shadow: 0 0 0 3px rgba(79,142,247,.18);
+  }
+  .otp-box.filled { border-color: #22c55e; }
+  .otp-box.shake  { animation: shake .4s ease; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%       { transform: translateX(-6px); }
+    40%       { transform: translateX(6px); }
+    60%       { transform: translateX(-4px); }
+    80%       { transform: translateX(4px); }
+  }
+  .otp-err { color: #ef4444; font-size: .82rem; min-height: 1.2em; }
+  .otp-verified-banner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    animation: fadeIn .4s ease;
+  }
+  .otp-verified-check {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: rgba(34,197,94,.15);
+    border: 2px solid #22c55e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    color: #22c55e;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Map Card ────────────────────────────────────────────────────────────── */
+  .ar-map-card {
+    background: #1a1d27;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    overflow: hidden;
+    position: relative;
+    min-height: 340px;
+    display: flex;
+    flex-direction: column;
+  }
+  .ar-map-header {
+    padding: .875rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    flex-shrink: 0;
+  }
+  .ar-map-title { font-size: .9rem; font-weight: 700; color: #e8eaf6; }
+  #ar-map { flex: 1; min-height: 280px; }
+  .ar-eta-row {
+    padding: .75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-top: 1px solid rgba(255,255,255,.06);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .ar-eta-item { font-size: .82rem; color: #a0a8c8; }
+  .ar-eta-val  { font-weight: 700; color: #e8eaf6; }
+
+  /* ── Info Grid Card ──────────────────────────────────────────────────────── */
+  .ar-info-card {
+    background: #1a1d27;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    padding: 1.5rem 1.5rem 1rem;
+  }
+  .ar-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .85rem 1.5rem;
+  }
+  .ar-info-label { font-size: .75rem; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
+  .ar-info-val   { font-size: .95rem; font-weight: 600; color: #e8eaf6; margin-top: .12rem; }
+
+  /* ── Action Button Row ───────────────────────────────────────────────────── */
+  .ar-actions {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ar-page" id="ar-page">
+
+  <!-- Route Banner -->
+  <div class="ar-route-banner">
+    <div>
+      <div class="ar-route-label">
+        {% if is_driver %}🚗 You are the Driver{% else %}🎒 You are a Passenger{% endif %}
+      </div>
+      <div class="ar-route-text">
+        {{ ride.source }}
+        <span class="ar-route-arrow">→</span>
+        {{ ride.destination }}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+      <span class="ar-status-pill active" id="ar-status-pill">
+        ⏳ Boarding
+      </span>
+      <span class="live-badge-inline hidden" id="ar-live-badge">
+        <span class="live-dot"></span> LIVE
+      </span>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="ar-grid">
+
+    <!-- Left: OTP Panel -->
+    {% if is_driver %}
+    <!-- ── DRIVER: Enter OTP from passenger ── -->
+    <div class="otp-card" id="driver-otp-card">
+      <div class="otp-card-title">🔐 Verify Passenger OTP</div>
+      <p style="font-size:.84rem;color:#6b7280;max-width:240px;margin:0 auto;">
+        Ask your passenger for their 4-digit boarding code.
+      </p>
+
+      <!-- OTP boxes (hidden once verified) -->
+      <div id="otp-entry-area">
+        <div class="otp-boxes-row" id="otp-boxes-row">
+          <input class="otp-box" type="text" inputmode="numeric" maxlength="1" id="ob0" autocomplete="off">
+          <input class="otp-box" type="text" inputmode="numeric" maxlength="1" id="ob1" autocomplete="off">
+          <input class="otp-box" type="text" inputmode="numeric" maxlength="1" id="ob2" autocomplete="off">
+          <input class="otp-box" type="text" inputmode="numeric" maxlength="1" id="ob3" autocomplete="off">
+        </div>
+        <p class="otp-err" id="otp-err-msg"></p>
+        <button class="btn btn-primary" id="otp-submit-btn" onclick="submitOtp()" style="width:100%;margin-top:.5rem;">
+          <span id="otp-btn-label">Verify OTP</span>
+        </button>
+      </div>
+
+      <!-- Success state (replaces entry area) -->
+      <div class="otp-verified-banner hidden" id="otp-verified-banner">
+        <div class="otp-verified-check">✓</div>
+        <div style="font-weight:700;color:#22c55e;font-size:1rem;">Passenger Verified!</div>
+        <div style="font-size:.8rem;color:#6b7280;">Live GPS tracking is now active</div>
+      </div>
+    </div>
+
+    {% else %}
+    <!-- ── PASSENGER: Display OTP + waiting indicator ── -->
+    <div class="otp-card" id="passenger-otp-card">
+      <div class="otp-card-title">🎟️ Your Boarding OTP</div>
+      <p style="font-size:.84rem;color:#6b7280;max-width:220px;margin:0 auto;">
+        Share this code with your driver to start the ride.
+      </p>
+
+      <!-- Digit boxes — populated via Socket.IO ride_accepted event -->
+      <div class="otp-display-row" id="otp-display-row">
+        <div class="otp-digit-box" id="pd0">—</div>
+        <div class="otp-digit-box" id="pd1">—</div>
+        <div class="otp-digit-box" id="pd2">—</div>
+        <div class="otp-digit-box" id="pd3">—</div>
+      </div>
+
+      <div class="otp-waiting-line" id="otp-status-line">
+        <span class="otp-waiting-dot"></span>
+        <span id="otp-status-text">Waiting for driver to verify…</span>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Right: Live Map -->
+    <div class="ar-map-card">
+      <div class="ar-map-header">
+        <span class="ar-map-title">📍 Live Ride Map</span>
+        <span style="font-size:.78rem;color:#6b7280;" id="map-last-update">Waiting for location…</span>
+      </div>
+      <div id="ar-map"></div>
+      <div class="ar-eta-row">
+        <div class="ar-eta-item">ETA <span class="ar-eta-val" id="eta-display">—</span></div>
+        <div class="ar-eta-item">Status <span class="ar-eta-val" id="driver-status-display">
+          {% if is_driver %}Awaiting verification{% else %}Waiting for driver{% endif %}
+        </span></div>
+      </div>
+    </div>
+
+  </div><!-- /ar-grid -->
+
+  <!-- Ride Info Card -->
+  <div class="ar-info-card">
+    <div class="ar-info-grid">
+      <div>
+        <div class="ar-info-label">Departure</div>
+        <div class="ar-info-val">{{ ride.departure_time }}</div>
+      </div>
+      <div>
+        <div class="ar-info-label">Vehicle</div>
+        <div class="ar-info-val">{{ ride.vehicle_type }}</div>
+      </div>
+      <div>
+        <div class="ar-info-label">Price</div>
+        <div class="ar-info-val">{% if ride.is_free %}FREE{% else %}₹{{ ride.price }}{% endif %}</div>
+      </div>
+      <div>
+        <div class="ar-info-label">Seats</div>
+        <div class="ar-info-val">{{ ride.seats_available }} available</div>
+      </div>
+    </div>
+    <div class="ar-actions" style="margin-top:1.25rem;">
+      {% if is_driver %}
+      <button class="btn btn-danger btn-sm" onclick="cancelRide()">❌ Cancel Ride</button>
+      <button class="btn btn-success" id="complete-btn" onclick="completeRide()">✅ Complete Ride</button>
+      {% else %}
+      <a href="{{ url_for('main.dashboard') }}" class="btn btn-ghost btn-sm">← Dashboard</a>
+      {% endif %}
+    </div>
+  </div>
+
+</div><!-- /ar-page -->
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/active_ride.js') }}"></script>
+<script>
+  // Inject server-side vars into JS scope
+  window.AR_RIDE_ID     = "{{ ride._id }}";
+  window.AR_IS_DRIVER   = ("{{ is_driver }}" === "True");
+  window.AR_IS_PASSENGER= ("{{ is_passenger }}" === "True");
+  window.AR_OTP_VERIFIED= ("{{ ride.otp_verified }}" === "True");
+</script>
+{% endblock %}

@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="MET Ride — Carpooling platform for MET BKC college students. Save fuel, save money, ride together." />
+  <title>{% block title %}MET Ride{% endblock %}</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+  {% block extra_head %}{% endblock %}
+</head>
+
+<body>
+
+  <!-- ── Navigation ── -->
+  {% if session.get('user_id') %}
+  <nav class="navbar" id="main-navbar">
+    <div class="nav-brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 17H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v12" />
+        <path d="M13 17h4M9 17l-2 5M15 17l2 5" />
+        <circle cx="7.5" cy="17" r="1.5" />
+        <circle cx="16.5" cy="17" r="1.5" />
+      </svg>
+      <span class="brand-name">MET<span class="brand-accent">Ride</span></span>
+    </div>
+
+    <div class="nav-links" id="nav-links">
+      <a href="{{ url_for('main.dashboard') }}"
+        class="nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+        </svg>
+        Dashboard
+      </a>
+      <a href="{{ url_for('ride.post_ride_page') }}"
+        class="nav-link {% if request.endpoint == 'ride.post_ride_page' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="16" />
+          <line x1="8" y1="12" x2="16" y2="12" />
+        </svg>
+        Post Ride
+      </a>
+      <a href="{{ url_for('ride.request_ride_page') }}"
+        class="nav-link {% if request.endpoint == 'ride.request_ride_page' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+          <circle cx="12" cy="10" r="3" />
+        </svg>
+        Find Ride
+      </a>
+      <a href="{{ url_for('main.profile') }}"
+        class="nav-link {% if request.endpoint == 'main.profile' %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+        Profile
+      </a>
+      {% if session.get('is_admin') %}
+      <a href="{{ url_for('admin.admin_dashboard') }}"
+        class="nav-link nav-admin {% if 'admin' in (request.endpoint or '') %}active{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        Admin
+      </a>
+      {% endif %}
+    </div>
+
+    <div class="nav-actions">
+      <!-- Notification Bell + Dropdown -->
+      <div class="notif-wrapper" id="notif-wrapper">
+        <button class="nav-icon-btn" id="notif-btn" title="Notifications" aria-label="Notifications"
+          aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 01-3.46 0" />
+          </svg>
+          <span class="notif-badge hidden" id="notif-count">0</span>
+        </button>
+
+        <!-- Notification Panel -->
+        <div class="notif-panel hidden" id="notif-panel" role="dialog" aria-label="Notifications">
+          <div class="notif-panel-header">
+            <span class="notif-panel-title">🔔 Notifications</span>
+            <button class="notif-mark-all" id="notif-mark-all" title="Mark all as read">Mark all read</button>
+          </div>
+          <div class="notif-panel-body" id="notif-list">
+            <div class="notif-loading" id="notif-loading">
+              <div class="notif-skeleton animate-shimmer"></div>
+              <div class="notif-skeleton animate-shimmer delay-200"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SOS Button -->
+      <button class="sos-btn" id="sos-btn" title="Send SOS Alert">SOS</button>
+
+      <!-- Theme Toggle -->
+      <button class="nav-icon-btn" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+        </svg>
+      </button>
+
+      <!-- Hamburger -->
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+
+      <!-- Avatar + Logout -->
+      <div class="nav-user">
+        <span class="nav-user-name">{{ session.get('name', session.get('email', ''))[:12] }}</span>
+        <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-sm">Logout</a>
+      </div>
+    </div>
+  </nav>
+  {% endif %}
+
+  <!-- ── Flash Messages ── -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-container" id="flash-container">
+    {% for category, message in messages %}
+    <div class="flash flash-{{ category }}">
+      <span>{{ message }}</span>
+      <button onclick="this.parentElement.remove()" class="flash-close">&times;</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  <!-- ── SOS Modal ── -->
+  {% if session.get('user_id') %}
+  <div class="modal-overlay hidden" id="sos-modal-overlay">
+    <div class="modal" id="sos-modal">
+      <div class="modal-header modal-header-danger">
+        <h2>🚨 Send SOS Alert</h2>
+      </div>
+      <div class="modal-body">
+        <p>This will notify all admins with your current location. Only use in a genuine emergency.</p>
+        <p id="sos-location-text" class="sos-location-text">📍 Fetching location…</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeSosModal()">Cancel</button>
+        <button class="btn btn-danger" id="sos-confirm-btn" onclick="confirmSos()">Send SOS</button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Page Content ── -->
+  <main class="page-main {% if not session.get('user_id') %}page-main-auth{% endif %}">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer class="site-footer">
+    <p>&copy; 2025 <strong>MET Ride</strong> — MET BKC College Carpooling</p>
+  </footer>
+
+  <!-- ── Scripts ── -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+
+  {% if session.get('user_id') %}
+  <!-- Session data for logged-in JS -->
+  <script>
+    window.MET = {
+      userId: "{{ session.get('user_id', '') | e }}",
+      email: "{{ session.get('email', '') | e }}",
+      name: "{{ session.get('name', '') | e }}",
+      isAdmin: JSON.parse('{{ session.get("is_admin", False) | tojson }}'),
+      role: "{{ session.get('role', 'user') | e }}"
+    };
+  </script>
+  <!-- auth_logic.js covers nav/SOS for logged-in pages -->
+  <script src="{{ url_for('static', filename='js/auth_logic.js') }}"></script>
+  {% else %}
+  <!-- Stub MET for login/register page (no session yet) -->
+  <script>window.MET = { userId: '', email: '', name: '', isAdmin: false, role: 'user' };</script>
+  <!-- auth_logic.js MUST load on login page — provides handleRegister, handleLogin, switchTab -->
+  <script src="{{ url_for('static', filename='js/auth_logic.js') }}"></script>
+  {% endif %}
+
+  {% block extra_scripts %}{% endblock %}
+
+  {% if session.get('user_id') %}
+  <style>
+    /* ── Notification Panel ─────────────────────────────────────────── */
+    .notif-wrapper {
+      position: relative;
+    }
+
+    .notif-panel {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: 340px;
+      max-height: 480px;
+      background: var(--bg-card, #1a1a2e);
+      border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: notifSlideIn .2s ease;
+    }
+
+    .notif-panel.hidden {
+      display: none !important;
+    }
+
+    @keyframes notifSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .notif-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .875rem 1rem;
+      border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+      flex-shrink: 0;
+    }
+
+    .notif-panel-title {
+      font-weight: 600;
+      font-size: .95rem;
+    }
+
+    .notif-mark-all {
+      background: none;
+      border: none;
+      color: var(--brand-primary, #7c3aed);
+      font-size: .78rem;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .notif-mark-all:hover {
+      text-decoration: underline;
+    }
+
+    .notif-panel-body {
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .notif-item {
+      display: flex;
+      gap: .75rem;
+      padding: .875rem 1rem;
+      border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.05));
+      transition: background .15s;
+    }
+
+    .notif-item:last-child {
+      border-bottom: none;
+    }
+
+    .notif-item:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .notif-item.unread {
+      background: rgba(124, 58, 237, 0.08);
+    }
+
+    .notif-icon {
+      font-size: 1.2rem;
+      flex-shrink: 0;
+      margin-top: .1rem;
+    }
+
+    .notif-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .notif-title {
+      font-size: .84rem;
+      line-height: 1.4;
+      color: var(--text-primary, #fff);
+    }
+
+    .notif-time {
+      font-size: .73rem;
+      color: var(--text-muted, #888);
+      margin-top: .2rem;
+    }
+
+    .notif-actions {
+      display: flex;
+      gap: .5rem;
+      margin-top: .5rem;
+      flex-wrap: wrap;
+    }
+
+    .notif-skeleton {
+      height: 54px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      margin: .5rem 1rem;
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% {
+        opacity: .4;
+      }
+
+      50% {
+        opacity: .8;
+      }
+
+      100% {
+        opacity: .4;
+      }
+    }
+
+    .notif-badge {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      background: #ef4444;
+      color: #fff;
+      font-size: .62rem;
+      font-weight: 700;
+      min-width: 17px;
+      height: 17px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 3px;
+      pointer-events: none;
+      border: 2px solid var(--bg-nav, #0d0d1a);
+    }
+
+    .notif-badge.hidden {
+      display: none;
+    }
+
+    .nav-icon-btn {
+      position: relative;
+    }
+
+    @keyframes notifPulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      40% {
+        transform: scale(1.25);
+      }
+    }
+
+    .notif-pulse svg {
+      animation: notifPulse .45s ease;
+    }
+
+    .location-banner {
+      position: fixed;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid #22c55e;
+      color: #22c55e;
+      border-radius: 99px;
+      padding: .5rem 1.25rem;
+      font-size: .84rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      z-index: 9998;
+      white-space: nowrap;
+      backdrop-filter: blur(10px);
+    }
+
+    .location-banner.hidden {
+      display: none;
+    }
+  </style>
+
+  <div class="location-banner hidden" id="location-sharing-banner">
+    📍 You are sharing your live location with passengers
+    <button class="btn btn-danger btn-sm"
+      onclick="if(typeof stopAutoLocationShare === 'function') stopAutoLocationShare(); else this.parentElement.classList.add('hidden');">Stop
+      Sharing</button>
+  </div>
+
+  <script>
+    // ── Notification Bell — Full Implementation ───────────────────────────────
+    (function () {
+      const btn = document.getElementById("notif-btn");
+      const panel = document.getElementById("notif-panel");
+      const badge = document.getElementById("notif-count");
+      const list = document.getElementById("notif-list");
+      const markAllBtn = document.getElementById("notif-mark-all");
+
+      if (!btn || !panel) return; // guard
+
+      // ── Toggle panel ────────────────────────────────────────────────────────
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        const opening = panel.classList.contains("hidden");
+        panel.classList.toggle("hidden", !opening);
+        btn.setAttribute("aria-expanded", opening);
+        if (opening) fetchNotifications();
+      });
+
+      // ── Close on outside click ───────────────────────────────────────────────
+      document.addEventListener("click", function (e) {
+        if (!panel.contains(e.target) && e.target !== btn) {
+          panel.classList.add("hidden");
+          btn.setAttribute("aria-expanded", "false");
+        }
+      });
+
+      // ── Mark all read ────────────────────────────────────────────────────────
+      if (markAllBtn) {
+        markAllBtn.addEventListener("click", function () {
+          fetch("/api/notifications/mark-read", {
+            method: "POST", credentials: "same-origin",
+            headers: { "Content-Type": "application/json" }
+          }).then(() => {
+            badge.classList.add("hidden");
+            document.querySelectorAll(".notif-item.unread")
+              .forEach(el => el.classList.remove("unread"));
+          });
+        });
+      }
+
+      // ── Fetch & render notifications ─────────────────────────────────────────
+      function fetchNotifications() {
+        list.innerHTML = '<div class="notif-skeleton"></div><div class="notif-skeleton"></div>';
+
+        fetch("/api/notifications", { credentials: "same-origin" })
+          .then(r => r.json())
+          .then(notifs => {
+            if (!Array.isArray(notifs) || !notifs.length) {
+              list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--text-muted,#888);font-size:.875rem;">No notifications yet 🔔</div>';
+              badge.classList.add("hidden");
+              return;
+            }
+
+            const unread = notifs.filter(n => !n.is_read).length;
+            updateBadge(unread);
+            list.innerHTML = notifs.map(renderNotif).join("");
+
+            // Auto mark-read after viewing
+            setTimeout(() => {
+              fetch("/api/notifications/mark-read", {
+                method: "POST", credentials: "same-origin",
+                headers: { "Content-Type": "application/json" }
+              }).then(() => badge.classList.add("hidden"));
+            }, 1500);
+          })
+          .catch(() => {
+            list.innerHTML = '<div style="padding:1rem;color:#ef4444;font-size:.84rem;text-align:center;">Failed to load. Try again.</div>';
+          });
+      }
+
+      function updateBadge(count) {
+        if (count > 0) {
+          badge.textContent = count > 9 ? "9+" : count;
+          badge.classList.remove("hidden");
+        } else {
+          badge.classList.add("hidden");
+        }
+      }
+
+      // ── Render a single notification ─────────────────────────────────────────
+      function timeAgoOrClock(isoStr) {
+        if (!isoStr) return "";
+        const d    = new Date(isoStr);
+        const now  = Date.now();
+        const diff = Math.floor((now - d.getTime()) / 1000); // seconds
+        if (diff < 60)           return "Just now";
+        if (diff < 3600)         return Math.floor(diff / 60) + "m ago";
+        if (diff < 86400)        return Math.floor(diff / 3600) + "h ago";
+        if (diff < 7 * 86400)    return Math.floor(diff / 86400) + "d ago";
+        return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " +
+               d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      }
+
+      function renderNotif(n) {
+        const time = timeAgoOrClock(n.created_at);
+        const cls = n.is_read ? "" : "unread";
+
+        if (n.type === "join_request") {
+          return `<div class="notif-item ${cls}" id="notif-${n._id}">
+          <div class="notif-icon">🙋</div>
+          <div class="notif-content">
+            <div class="notif-title">${escHtml(n.message)}</div>
+            <div class="notif-time">${time}</div>
+            <div class="notif-actions">
+              <button class="btn btn-success btn-sm"
+                onclick="bellRespondRequest('${n.ride_id}','${n.from_user_id}','accept','${n._id}')">
+                ✅ Accept
+              </button>
+              <button class="btn btn-ghost btn-sm"
+                onclick="bellRespondRequest('${n.ride_id}','${n.from_user_id}','reject','${n._id}')">
+                ❌ Reject
+              </button>
+            </div>
+          </div>
+        </div>`;
+        }
+
+        if (n.type === "request_accepted") {
+          return `<div class="notif-item ${cls}" id="notif-${n._id}">
+          <div class="notif-icon">✅</div>
+          <div class="notif-content">
+            <div class="notif-title">${escHtml(n.message)}</div>
+            <div class="notif-time">${time}</div>
+            <div class="notif-actions">
+              <button class="btn btn-primary btn-sm"
+                onclick="panel.classList.add('hidden'); if(typeof openTrackingModal==='function') openTrackingModal('${n.ride_id}')">
+                🗺️ Track Ride
+              </button>
+            </div>
+          </div>
+        </div>`;
+        }
+
+        if (n.type === "request_rejected") {
+          return `<div class="notif-item ${cls}" id="notif-${n._id}">
+          <div class="notif-icon">❌</div>
+          <div class="notif-content">
+            <div class="notif-title">${escHtml(n.message)}</div>
+            <div class="notif-time">${time}</div>
+          </div>
+        </div>`;
+        }
+
+        if (n.type === "admin_granted") {
+          return `<div class="notif-item ${cls}" id="notif-${n._id}">
+          <div class="notif-icon">👑</div>
+          <div class="notif-content">
+            <div class="notif-title">${escHtml(n.message)}</div>
+            <div class="notif-time">${time}</div>
+          </div>
+        </div>`;
+        }
+
+        // Generic fallback
+        return `<div class="notif-item ${cls}" id="notif-${n._id}">
+        <div class="notif-icon">🔔</div>
+        <div class="notif-content">
+          <div class="notif-title">${escHtml(n.message)}</div>
+          <div class="notif-time">${time}</div>
+        </div>
+      </div>`;
+      }
+
+      function escHtml(str) {
+        return String(str || "")
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+
+      // ── Accept / Reject from panel ────────────────────────────────────────────
+      window.bellRespondRequest = function (rideId, requesterId, action, notifId) {
+        const card = document.getElementById("notif-" + notifId);
+        if (card) card.querySelector(".notif-actions").innerHTML =
+          '<span style="font-size:.8rem;color:var(--text-muted)">Processing…</span>';
+
+        fetch(`/api/respond-request/${rideId}/${requesterId}/${action}`, {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" }
+        })
+          .then(r => r.json())
+          .then(d => {
+            if (card) {
+              card.querySelector(".notif-actions").innerHTML =
+                `<span style="font-size:.82rem;color:${action === 'accept' ? '#22c55e' : '#888'}">
+              ${action === "accept" ? "✅ Accepted" : "❌ Rejected"}
+             </span>`;
+            }
+            if (action === 'accept') {
+              if (navigator.geolocation) {
+                if (typeof showToast === "function") showToast("📍 Starting live location sharing…", "info");
+                setTimeout(() => {
+                  const banner = document.getElementById("location-sharing-banner");
+                  if (banner) banner.classList.remove("hidden");
+                  if (typeof startAutoLocationShare === "function") {
+                    startAutoLocationShare(rideId);
+                  }
+                }, 500);
+              }
+            } else {
+              if (typeof showToast === "function")
+                showToast(d.message || "Done", d.success ? "success" : "danger");
+            }
+          })
+          .catch(() => {
+            if (card) card.querySelector(".notif-actions").innerHTML =
+              '<span style="color:#ef4444;font-size:.8rem;">Failed — try again</span>';
+          });
+      };
+
+      // ── On page load: show unread badge without opening panel ─────────────────
+      fetch("/api/notifications", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(notifs => {
+          if (!Array.isArray(notifs)) return;
+          updateBadge(notifs.filter(n => !n.is_read).length);
+        })
+        .catch(() => { });
+
+      // ── Socket.IO: live badge updates ─────────────────────────────────────────
+      // Wait for socket to be ready (defined in chat.js or auth_logic.js)
+      function waitForSocket(cb, tries) {
+        tries = tries || 0;
+        if (typeof socket !== "undefined") { cb(socket); return; }
+        if (tries > 20) return;
+        setTimeout(() => waitForSocket(cb, tries + 1), 300);
+      }
+      waitForSocket(function (sock) {
+        sock.on("new_notification", function (data) {
+          updateBadge(data.count || 1);
+          btn.classList.add("notif-pulse");
+          setTimeout(() => btn.classList.remove("notif-pulse"), 500);
+        });
+      });
+
+    })();
+  </script>
+  {% endif %}
+
+</body>
+
+</html>

@@ -1,0 +1,1459 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — MET Ride{% endblock %}
+
+{% block content %}
+<!-- Dashboard Header -->
+<div class="dashboard-header">
+  <div>
+    <h1 class="greeting-title">
+      Hey, {{ session.get('name', 'Rider').split(' ')[0] }} 👋
+    </h1>
+    <p class="greeting-sub">Ready to share a ride today?</p>
+  </div>
+  <div style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:center;">
+    <a href="{{ url_for('ride.post_ride_page') }}" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="16" />
+        <line x1="8" y1="12" x2="16" y2="12" />
+      </svg>
+      Post a Ride
+    </a>
+    <a href="{{ url_for('ride.request_ride_page') }}" class="btn btn-secondary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+        <circle cx="12" cy="10" r="3" />
+      </svg>
+      Find a Ride
+    </a>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="stats-container" style="position:relative; margin-bottom: 2rem;">
+  <div class="stats-grid">
+    <div class="stat-card" onclick="toggleStatCard('active-rides')">
+      <div class="stat-icon">🚗</div>
+      <div class="stat-value" id="stat-active-rides">{{ active_rides|length }}</div>
+      <div class="stat-label">Active Rides</div>
+    </div>
+    <div class="stat-card" onclick="toggleStatCard('fuel-saved')">
+      <div class="stat-icon">🌿</div>
+      <div class="stat-value" id="stat-fuel">0 L</div>
+      <div class="stat-label">Fuel Saved Today</div>
+    </div>
+    <div class="stat-card" onclick="toggleStatCard('riders-online')">
+      <div class="stat-icon">👥</div>
+      <div class="stat-value" id="stat-riders">—</div>
+      <div class="stat-label">Riders Online</div>
+    </div>
+    <div class="stat-card" onclick="toggleStatCard('my-rating')">
+      <div class="stat-icon">⭐</div>
+      <div class="stat-value" id="stat-rating">
+        {% if user and user.get('ratings') %}
+        {{ (user['ratings'] | sum / user['ratings'] | length) | round(1) }}
+        {% else %}—{% endif %}
+      </div>
+      <div class="stat-label">Your Rating</div>
+    </div>
+    
+    <div class="stat-detail-panel hidden" id="detail-active-rides">
+      <div class="stat-detail-loading">
+        <div class="notif-skeleton"></div><div class="notif-skeleton"></div>
+      </div>
+    </div>
+    <div class="stat-detail-panel hidden" id="detail-fuel-saved">
+      <div class="stat-detail-loading">
+        <div class="notif-skeleton"></div><div class="notif-skeleton"></div>
+      </div>
+    </div>
+    <div class="stat-detail-panel hidden" id="detail-riders-online">
+      <div class="stat-detail-loading">
+        <div class="notif-skeleton"></div><div class="notif-skeleton"></div>
+      </div>
+    </div>
+    <div class="stat-detail-panel hidden" id="detail-my-rating">
+      <div class="stat-detail-loading">
+        <div class="notif-skeleton"></div><div class="notif-skeleton"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main Grid -->
+<div class="dashboard-grid">
+
+  <!-- Left: Active Rides -->
+  <div>
+    <div class="section-tabs">
+      <button class="tab-btn active" id="tab-available-btn" onclick="switchDashboardTab('available')">🚗 Available
+        Rides</button>
+      <button class="tab-btn" id="tab-history-btn" onclick="switchDashboardTab('history')">📋 My Rides</button>
+    </div>
+
+    <!-- Available Rides Tab -->
+    <div id="tab-available" class="tab-content active">
+
+      <!-- Suggested For You Strip -->
+      <div id="suggested-rides-section" style="margin-bottom: 1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.5rem;">
+          <h3 style="font-size:1rem; font-weight:600;">Suggested For You 📍</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadSuggestedRides()">↻ Refresh</button>
+        </div>
+        <div id="suggested-banner" class="card" style="padding:1rem; text-align:center; background:rgba(124, 58, 237, 0.05);">
+            <div style="margin-bottom:0.5rem;">📍 Enable location for nearest ride suggestions</div>
+            <button class="btn btn-primary btn-sm" onclick="enableLocationForSuggestions()">Enable Location</button>
+        </div>
+        <div id="suggested-rides-list" style="display:flex; gap:1rem; overflow-x:auto; padding-bottom:0.5rem;" class="hidden">
+           <!-- Rendered via JS -->
+        </div>
+      </div>
+
+      <div class="section-header">
+        <h2 class="section-title">
+          <span style="color:var(--brand-primary)">▮</span> All Available Rides
+        </h2>
+        <button class="btn btn-ghost btn-sm" onclick="refreshRides()" id="refresh-btn">↻ Refresh</button>
+      </div>
+
+      <div class="rides-list" id="rides-list">
+        {% if active_rides %}
+        {% for ride in active_rides %}
+        <div class="ride-card" id="ride-{{ ride['_id'] }}" data-ride-id="{{ ride['_id'] }}"
+          onclick="openRideDetail(this.dataset.rideId)">
+          <div>
+            <div class="ride-route">
+              <span>{{ ride.source }}</span>
+              <span class="ride-route-arrow">→</span>
+              <span>{{ ride.destination }}</span>
+            </div>
+            <div class="ride-meta">
+              <span class="ride-meta-badge">🕐 {{ ride.departure_time }}</span>
+              <span class="ride-meta-badge">🚘 {{ ride.vehicle_type }}</span>
+              <span class="ride-meta-badge {% if ride.is_free %}free{% endif %}">
+                {% if ride.is_free %}FREE{% else %}₹{{ ride.price }}{% endif %}
+              </span>
+              <span class="ride-meta-badge">👤 {{ ride.rider_name }}</span>
+            </div>
+          </div>
+          <div class="ride-actions">
+            <span class="seats-badge">{{ ride.seats_available }} seats</span>
+            <button class="btn btn-primary btn-sm" data-ride-id="{{ ride['_id'] }}"
+              onclick="event.stopPropagation(); requestRide(this.dataset.rideId)" {% if
+              ride.rider_id==session.get('user_id') %}disabled title="Your own ride" {% endif %}>
+              Request
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+          <div class="empty-state-icon">🚗</div>
+          <div class="empty-state-title">No active rides right now</div>
+          <p class="text-sm text-muted">Be the first to post one!</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- My Rides / History Tab -->
+    <div id="tab-history" class="tab-content">
+      <div class="section-header">
+        <h2 class="section-title">
+          <span style="color:var(--brand-primary)">▮</span> My Ride History
+        </h2>
+      </div>
+      <div class="rides-list" id="history-list">
+        <!-- Rendered via JS -->
+        <div class="skeleton" style="height:100px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Chat + Map -->
+  <div style="display:flex; flex-direction:column; gap:1rem;">
+
+    <!-- Chat Panel -->
+    <div class="chat-panel" id="chat-panel">
+      <div class="chat-header">
+        <span class="chat-title">💬 Ride Chat</span>
+        <span id="chat-room-label" class="text-sm text-muted">Select a ride to join</span>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-join-prompt" id="chat-prompt">
+          Click a ride card and press "Join Chat" to start chatting with riders.
+        </div>
+      </div>
+      <div class="chat-input-area" id="chat-input-area" style="display:none;">
+        <input class="chat-input" type="text" id="chat-input" placeholder="Type a message…" maxlength="300" />
+        <button class="chat-send-btn" onclick="sendChatMessage()" title="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Map -->
+    <div class="map-container card">
+      <div class="card-header">
+        <span class="card-title">📍 Live Ride Map</span>
+        <span class="text-sm text-muted" id="map-status">Waiting for location…</span>
+      </div>
+      <div id="ride-map"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Ride Detail Modal ── -->
+<div class="modal-overlay hidden" id="ride-detail-overlay">
+  <div class="modal" id="ride-detail-modal">
+    <div class="modal-header">
+      <h2 id="rd-route">Ride Details</h2>
+    </div>
+    <div class="modal-body" id="rd-body">
+      <div class="skeleton" style="height:120px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeRideDetail()">Close</button>
+      <button class="btn btn-danger hidden" id="rd-cancel-btn" onclick="openCancelModal()">❌ Cancel Ride</button>
+      <button class="btn btn-secondary" id="rd-chat-btn" onclick="joinRideChat()">💬 Join Chat</button>
+      <button class="btn btn-primary" id="rd-request-btn" onclick="openPaymentOrRequest()">Request Ride</button>
+      <button class="btn btn-success hidden" id="rd-complete-btn" onclick="completeRide()">✅ Complete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Payment Modal ── -->
+<div class="modal-overlay hidden" id="payment-modal-overlay">
+  <div class="modal" id="payment-modal">
+    <div class="modal-header">
+      <h2>💳 Choose Payment Method</h2>
+    </div>
+    <div class="modal-body">
+      <p>Ride: <strong id="pay-route"></strong></p>
+      <p>Amount: <strong id="pay-amount"></strong></p>
+      <div class="section-divider"></div>
+      <div style="margin-bottom:10px;">
+        <label><input type="radio" name="pay_method" value="upi" checked> 📱 UPI</label>
+        <input type="text" id="pay-upi" class="form-input mt-1" placeholder="yourname@upi" />
+      </div>
+      <div style="margin-bottom:10px;">
+        <label><input type="radio" name="pay_method" value="card"> 💳 Card</label>
+        <input type="text" id="pay-card" class="form-input mt-1" placeholder="1234 5678 9101 1121" />
+      </div>
+      <div>
+        <label><input type="radio" name="pay_method" value="cash"> 💵 Cash (Pay to rider directly)</label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closePaymentModal()">Cancel</button>
+      <button class="btn btn-primary" id="pay-confirm-btn" onclick="processPayment()">Pay & Request</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Cancel Modal ── -->
+<div class="modal-overlay hidden" id="cancel-modal-overlay">
+  <div class="modal" id="cancel-modal">
+    <div class="modal-header">
+      <h2>❌ Cancel Ride</h2>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:1rem;">Why are you cancelling?</p>
+      <div style="display:flex; flex-direction:column; gap:.5rem;">
+          <label><input type="radio" name="cancel_reason" value="Change of plans" checked> Change of plans</label>
+          <label><input type="radio" name="cancel_reason" value="Found another ride"> Found another ride</label>
+          <label><input type="radio" name="cancel_reason" value="Emergency"> Emergency</label>
+          <label><input type="radio" name="cancel_reason" value="Vehicle issue"> Vehicle issue (riders only)</label>
+          <label><input type="radio" name="cancel_reason" value="Other"> Other</label>
+      </div>
+      <input type="text" id="cancel-reason-text" class="form-input" style="margin-top:1rem;" placeholder="Optional details..." />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCancelModal()">Keep Ride</button>
+      <button class="btn btn-danger" onclick="confirmCancelRide()">Confirm Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Live Tracking Modal ── -->
+<div class="modal-overlay hidden" id="tracking-modal-overlay">
+  <div class="modal modal-lg" id="tracking-modal">
+    <div class="modal-header">
+      <h2>📍 Live Ride Tracking</h2>
+      <button class="btn btn-ghost btn-sm" onclick="closeTrackingModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="tracking-map" style="height:400px; border-radius:var(--r-md); background:var(--bg-card);"></div>
+      <div class="tracking-info" id="tracking-info">
+        <div class="skeleton" style="height:40px;margin-top:1rem;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="tracking-share-btn" onclick="toggleLocationSharing()">
+        📍 Start Sharing Location
+      </button>
+      <button class="btn btn-ghost" onclick="closeTrackingModal()">Close Map</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Completion Modal ── -->
+<div class="modal-overlay hidden" id="completion-modal-overlay">
+  <div class="modal" id="completion-modal">
+    <div class="modal-body text-center" style="padding:2rem;">
+      <div style="font-size:3rem;margin-bottom:1rem;">🎉</div>
+      <h2>Ride Completed!</h2>
+      <p class="text-muted">Thank you for riding with MET Ride. We hope you had a great journey!</p>
+      <div class="section-divider"></div>
+      <button class="btn btn-primary w-full" onclick="location.reload()">Back to Dashboard</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ride Accepted Auto-Popup ── -->
+<div class="modal-overlay hidden" id="ride-accepted-popup-overlay">
+  <div class="modal" id="ride-accepted-popup" style="text-align:center; max-width:400px;">
+    <div class="modal-body" style="padding:2rem;">
+      <div style="font-size:3.5rem; margin-bottom:1rem;">🎉</div>
+      <h2 id="rap-title">Ride Accepted!</h2>
+      <p id="rap-message" class="text-muted" style="margin:.75rem 0 1.5rem;"></p>
+      <div style="display:flex; gap:.75rem; justify-content:center; flex-wrap:wrap;">
+        <button class="btn btn-primary" id="rap-track-btn" onclick="rapOpenTracking()">
+          🗺️ Track Ride Live
+        </button>
+        <button class="btn btn-ghost" onclick="document.getElementById('ride-accepted-popup-overlay').classList.add('hidden')">
+          Later
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- [MET RIDE 2 - NEW FEATURE] ── Passenger OTP Reveal Modal ── -->
+<div class="modal-overlay hidden" id="otp-reveal-overlay">
+  <div class="otp-reveal-modal" id="otp-reveal-modal">
+    <div class="otp-reveal-header">
+      <div class="otp-reveal-check">✓</div>
+      <h2 style="margin:0;font-size:1.4rem;">Your ride is confirmed!</h2>
+    </div>
+    <div class="otp-reveal-body">
+      <div id="otp-reveal-rider-info" class="otp-rider-info"></div>
+      <div class="otp-label-row">
+        <span class="otp-label">Your Boarding OTP</span>
+      </div>
+      <div class="otp-glow-display" id="otp-glow-digits">----</div>
+      <p class="otp-share-hint">📣 Share this code with your driver to start the ride</p>
+      <div class="otp-status-row" id="otp-status-row">
+        <span class="otp-waiting-dot"></span>
+        <span id="otp-status-text">Waiting for driver to verify OTP…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- [MET RIDE 2 - NEW FEATURE] ── Driver OTP Input Widget (inside Tracking Modal) ── -->
+<div id="otp-verify-widget" class="otp-verify-widget hidden">
+  <div class="otp-verify-header">
+    <span class="otp-verify-icon">🔐</span>
+    <div>
+      <div style="font-weight:700; font-size:1rem;">Verify Passenger OTP</div>
+      <div style="font-size:.8rem; color:var(--text-muted); margin-top:2px;">Ask your passenger for their 4-digit code</div>
+    </div>
+  </div>
+  <div class="otp-boxes-row" id="otp-boxes-row">
+    <input class="otp-box" type="text" inputmode="numeric" maxlength="1" id="ob0">
+    <input class="otp-box" type="text" inputmode="numeric" maxlength="1" id="ob1">
+    <input class="otp-box" type="text" inputmode="numeric" maxlength="1" id="ob2">
+    <input class="otp-box" type="text" inputmode="numeric" maxlength="1" id="ob3">
+  </div>
+  <p class="otp-verify-error hidden" id="otp-verify-error"></p>
+  <button class="btn btn-primary" id="otp-verify-btn" onclick="submitDriverOtp()">
+    <span id="otp-verify-btn-text">Verify OTP</span>
+  </button>
+</div>
+
+<!-- Verified success state (replaces widget) -->
+<div id="otp-verified-state" class="otp-verified-state hidden">
+  <div class="otp-verified-check">✓</div>
+  <div style="font-weight:700; color:#00FF88; font-size:1rem;">Passenger Verified</div>
+  <div style="font-size:.8rem; color:var(--text-muted); margin-top:4px;">Live tracking is now active</div>
+</div>
+
+<!-- [MET RIDE 2 - NEW FEATURE] ── LIVE Badge (shown on both sides after OTP verify) ── -->
+<div id="live-tracking-badge" class="live-badge hidden">
+  <span class="live-dot"></span> LIVE
+</div>
+
+
+  {% endblock %}
+
+  {% block extra_scripts %}
+  <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/map_logic.js') }}"></script>
+  <script>
+    // ── Dashboard JS ──────────────────────────────────────────────────────────────
+    let currentRideId = null;
+    let currentRideData = null;
+
+    // NOTE: `socket` is declared in chat.js (loaded above) — do not redeclare here.
+    // Join personal room for direct notification delivery
+    if (typeof socket !== "undefined" && window.MET?.userId) {
+      socket.emit("join_user_room", { user_id: window.MET.userId });
+    }
+
+    // [MET RIDE 2 - NEW FEATURE] On page load, join ride rooms for all rides we are part of
+    // We check active rides where the user is driver or passenger
+    (async function joinExistingRideRooms() {
+      try {
+        const res   = await fetch("/api/rides/my-history");
+        const rides = await res.json();
+        if (!Array.isArray(rides)) return;
+        rides.forEach(r => {
+          if (!r.active) return; // only join rooms for active rides
+          socket.emit("join_ride_room", { ride_id: r._id });
+          // Also restore driver OTP widget if we are the driver with unverified OTP
+          if (r.rider_id === window.MET.userId && r.otp && !r.otp_verified) {
+            showDriverOtpWidget(r._id);
+          }
+          // Restore LIVE badge if already verified
+          if (r.otp_verified) showLiveBadge();
+        });
+      } catch { /* silently ignore */ }
+    })();
+
+    // Real-time SocketIO updates
+    socket.on("request_response", (data) => {
+      showToast(data.message, data.status === "accepted" ? "success" : "warning");
+    });
+
+    // [MET RIDE 2 - NEW FEATURE] Extended ride_accepted handler
+    // - If WE are the PASSENGER (not the ride's driver): show OTP reveal modal
+    // - The existing acceptance popup still fires for both roles
+    socket.on("ride_accepted", (data) => {
+      const overlay = document.getElementById("ride-accepted-popup-overlay");
+      document.getElementById("rap-title").textContent = "🎉 Ride Accepted!";
+      document.getElementById("rap-message").textContent = data.message ||
+        `${data.rider_name} accepted your request. Your ride is confirmed!`;
+      document.getElementById("rap-track-btn").dataset.rideId = data.ride_id;
+      overlay.classList.remove("hidden");
+
+      // Passenger OTP reveal — only shown when OTP is in the payload
+      if (data.otp) {
+        showOtpRevealModal(data);
+        // Join the ride room so we can hear otp_verified and driver_location
+        socket.emit("join_ride_room", { ride_id: data.ride_id });
+      }
+
+      // After 4 seconds auto-dismiss the acceptance popup (OTP modal stays open if shown)
+      setTimeout(() => {
+        overlay.classList.add("hidden");
+        if (!data.otp) openTrackingModal(data.ride_id); // non-OTP rides go straight to map
+      }, 4000);
+
+      showToast(`🚗 ${data.rider_name} accepted your ride!`, "success");
+
+      fetch("/api/notifications", { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(n => {
+          const unread = n.filter(x => !x.is_read).length;
+          const badge = document.getElementById("notif-count");
+          if (badge && unread > 0) { badge.textContent = unread; badge.classList.remove("hidden"); }
+        });
+    });
+
+    // [MET RIDE 2 - NEW FEATURE] OTP verified — fires on both driver and passenger sides
+    socket.on("otp_verified", (data) => {
+      showToast("✅ OTP Verified — Live tracking is now active!", "success");
+      showLiveBadge();
+
+      // Close passenger OTP modal gracefully
+      const otpOverlay = document.getElementById("otp-reveal-overlay");
+      if (!otpOverlay.classList.contains("hidden")) {
+        const statusRow = document.getElementById("otp-status-row");
+        if (statusRow) {
+          statusRow.innerHTML = `<span style="color:#00FF88;font-weight:700;">✓ Driver Verified! Tracking started.</span>`;
+        }
+        setTimeout(() => otpOverlay.classList.add("hidden"), 2000);
+      }
+
+      // Switch driver widget to verified state
+      const widget = document.getElementById("otp-verify-widget");
+      const verified = document.getElementById("otp-verified-state");
+      if (widget && !widget.classList.contains("hidden")) {
+        widget.classList.add("hidden");
+        verified.classList.remove("hidden");
+      }
+
+      // If we are the driver, start broadcasting GPS
+      if (currentRideData && currentRideData.rider_id === window.MET.userId) {
+        startDriverGps(data.ride_id || currentRideId);
+      }
+
+      // Reveal the tracking modal / map
+      if (data.ride_id) openTrackingModal(data.ride_id);
+    });
+
+    // [MET RIDE 2 - NEW FEATURE] Driver location update — received by passenger
+    socket.on("driver_location", (data) => {
+      if (data.ride_id === currentRideId) {
+        updateTrackingMarker(data.lat, data.lng, "🚗 Driver (Live)");
+        showLiveBadge(); // ensure badge stays visible
+      }
+    });
+
+    function rapOpenTracking() {
+      const rideId = document.getElementById("rap-track-btn").dataset.rideId;
+      document.getElementById("ride-accepted-popup-overlay").classList.add("hidden");
+      openTrackingModal(rideId);
+    }
+
+    socket.on("sos_alert", (data) => {
+      if (window.MET && window.MET.isAdmin) {
+        showToast(`🚨 SOS from ${data.name || data.email}!`, "danger");
+      }
+    });
+
+    // ── Ride Detail ──────────────────────────────────────────────────────────────
+    function openRideDetail(rideId) {
+      currentRideId = rideId;
+      document.getElementById("ride-detail-overlay").classList.remove("hidden");
+      const body = document.getElementById("rd-body");
+      body.innerHTML = '<div class="skeleton" style="height:150px;border-radius:var(--r-md)"></div>';
+
+      fetch(`/api/ride/${rideId}`)
+        .then(r => r.json())
+        .then(ride => {
+          currentRideData = ride;
+          document.getElementById("rd-route").textContent = `${ride.source} → ${ride.destination}`;
+          body.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+          <div><div class="form-label">Departure</div><div style="font-weight:600">${ride.departure_time}</div></div>
+          <div><div class="form-label">Seats Available</div><div style="font-weight:600">${ride.seats_available}</div></div>
+          <div><div class="form-label">Vehicle</div><div style="font-weight:600">${ride.vehicle_type}</div></div>
+          <div><div class="form-label">Price</div><div style="font-weight:600">${ride.is_free ? "FREE" : "₹" + ride.price}</div></div>
+          <div><div class="form-label">Rider</div><div style="font-weight:600">${ride.rider_name || "Unknown"}</div></div>
+          <div><div class="form-label">Rating</div><div style="font-weight:600">${ride.rider_rating ? "⭐ " + ride.rider_rating : "—"}</div></div>
+        </div>
+        ${ride.route_stops && ride.route_stops.length ? `
+          <div class="section-divider"></div>
+          <div class="form-label">Stops Along the Way</div>
+          <div class="ride-detail-stops">${ride.route_stops.map(s => `<div class="stop-item">• ${s}</div>`).join('')}</div>
+        ` : ""}
+      `;
+          const isOwner = ride.rider_id === window.MET.userId;
+          const isPassenger = ride.accepted_riders && ride.accepted_riders.includes(window.MET.userId);
+          
+          document.getElementById("rd-request-btn").classList.toggle("hidden", isOwner || isPassenger);
+          document.getElementById("rd-complete-btn").classList.toggle("hidden", !isOwner || !ride.active);
+          document.getElementById("rd-chat-btn").classList.toggle("hidden", !ride.active);
+          document.getElementById("rd-cancel-btn").classList.toggle("hidden", !(isOwner || isPassenger) || !ride.active);
+        })
+        .catch(() => {
+          body.innerHTML = '<p class="text-danger">Failed to load ride details.</p>';
+        });
+    }
+
+    function closeRideDetail() {
+      document.getElementById("ride-detail-overlay").classList.add("hidden");
+    }
+
+    function requestCurrentRide() {
+      if (!currentRideId) return;
+      requestRide(currentRideId);
+      closeRideDetail();
+    }
+
+    function joinRideChat() {
+      if (!currentRideId) return;
+      window.joinRideChatRoom(currentRideId);
+      closeRideDetail();
+    }
+
+    function completeRide() {
+      if (!currentRideId || !confirm("Mark this ride as completed?")) return;
+      fetch(`/api/complete-ride/${currentRideId}`, { method: "POST" })
+        .then(r => r.json())
+        .then(d => {
+          if (d.success) {
+            showToast(`Ride completed! Fuel saved: ${d.fuel_saved}L 🌿`, "success");
+            // Notify co-riders via socket
+            socket.emit("ride_completed_signal", { ride_id: currentRideId });
+            closeRideDetail();
+            refreshRides();
+          } else {
+            showToast(d.message, "danger");
+          }
+        });
+    }
+
+    // ── Quick request from card ───────────────────────────────────────────────────
+    function requestRide(rideId) {
+      fetch(`/api/request-ride/${rideId}`, { method: "POST" })
+        .then(r => r.json())
+        .then(d => showToast(d.message, d.success ? "success" : "danger"));
+    }
+
+    // ── Stat Dropdowns ────────────────────────────────────────────────────────────
+    let currentOpenStat = null;
+    function toggleStatDetail(type) {
+      const panel = document.getElementById("stat-detail-panel");
+      const content = document.getElementById("stat-detail-content");
+      if (currentOpenStat === type && !panel.classList.contains("hidden")) {
+        panel.classList.add("hidden");
+        currentOpenStat = null;
+        return;
+      }
+      currentOpenStat = type;
+      panel.classList.remove("hidden");
+      content.innerHTML = '<div class="skeleton" style="height:60px;"></div>';
+
+      if (type === 'active-rides') {
+        fetch("/api/stats/active-riders").then(r => r.json()).then(data => {
+          if(!data.length) { content.innerHTML = '<p class="text-muted">No riders right now.</p>'; return; }
+          content.innerHTML = `<div><strong>Active Riders Right Now</strong></div><div style="margin-top:.5rem; display:flex; flex-direction:column; gap:.5rem;">` + 
+            data.map(d => `<div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:.25rem;">
+              <span>👤 ${d.name}</span>
+              <span class="text-muted">${d.source} → ${d.destination}</span>
+              <span>${d.seats_available} seats</span>
+            </div>`).join('') + `</div>`;
+        });
+      } else if (type === 'fuel') {
+        fetch("/api/stats/fuel-saved").then(r => r.json()).then(data => {
+          content.innerHTML = `<div><strong>♻️ Environmental Impact</strong></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.5rem;">
+              <div>Today: ${data.today} L saved</div>
+              <div>This Week: ${data.week} L saved</div>
+              <div>This Month: ${data.month} L saved</div>
+              <div>All Time: ${data.all_time} L saved</div>
+              <div style="grid-column: span 2; margin-top:.5rem; font-weight:600;">🌍 CO₂ Avoided: ${data.co2_avoided} kg</div>
+            </div>`;
+        });
+      } else if (type === 'riders') {
+        fetch("/api/stats/online-riders").then(r => r.json()).then(data => {
+            if(!data.length) { content.innerHTML = '<p class="text-muted">No one online.</p>'; return; }
+            content.innerHTML = `<div><strong>👥 Online Right Now</strong></div><div style="margin-top:.5rem; display:flex; flex-direction:column; gap:.5rem;">` + 
+            data.map(d => `<div style="display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:.25rem;">
+              <span>${d.is_online ? '🟢' : '🟡'} ${d.name}</span>
+              <span class="text-muted">Last seen: ${d.is_online ? 'just now' : new Date(d.last_seen).toLocaleTimeString([], {timeStyle: 'short'})}</span>
+            </div>`).join('') + `</div>`;
+        });
+      } else if (type === 'rating') {
+        fetch("/api/stats/my-rating").then(r => r.json()).then(data => {
+          content.innerHTML = `<div><strong>⭐ Your Rating Breakdown</strong></div>
+            <div style="display:flex; justify-content:space-between; margin-top:.5rem;">
+              <div>
+                <div>Average: ${data.average} ⭐</div>
+                <div class="text-muted">Total Reviews: ${data.total}</div>
+                <div style="margin-top:.5rem; max-width:200px;">Latest: "${data.latest_comment}"</div>
+              </div>
+              <div style="font-size:.875rem;">
+                <div>★★★★★ ${data.stars_5}</div>
+                <div>★★★★☆ ${data.stars_4}</div>
+                <div>★★★☆☆ ${data.stars_3}</div>
+                <div>★★☆☆☆ ${data.stars_2}</div>
+                <div>★☆☆☆☆ ${data.stars_1}</div>
+              </div>
+            </div>`;
+        });
+      }
+    }
+
+    fetch("/api/stats/fuel-saved").then(r => r.json()).then(d => { document.getElementById("stat-fuel").textContent = d.today + " L"; });
+    fetch("/api/stats/online-riders").then(r => r.json()).then(d => { document.getElementById("stat-riders").textContent = d.length; });
+
+
+    // ── Payment Modal & Flow ────────────────────────────────────────────────
+    function openPaymentOrRequest() {
+      if (!currentRideId || !currentRideData) return;
+      if (currentRideData.is_free) {
+        requestCurrentRide();
+      } else {
+        document.getElementById("pay-route").textContent = `${currentRideData.source} → ${currentRideData.destination}`;
+        document.getElementById("pay-amount").textContent = `₹${currentRideData.price}`;
+        document.getElementById("payment-modal-overlay").classList.remove("hidden");
+        closeRideDetail();
+      }
+    }
+
+    function closePaymentModal() {
+      document.getElementById("payment-modal-overlay").classList.add("hidden");
+    }
+
+    function processPayment() {
+      const method = document.querySelector('input[name="pay_method"]:checked').value;
+      let upi = document.getElementById("pay-upi").value;
+      let card = document.getElementById("pay-card").value;
+      
+      if (method === 'upi' && (!upi || !upi.includes('@'))) {
+          showToast("Please enter a valid UPI ID", "warning"); return;
+      }
+      if (method === 'card' && card.length < 16) {
+          showToast("Please enter a valid card number", "warning"); return;
+      }
+
+      const btn = document.getElementById("pay-confirm-btn");
+      btn.textContent = "Processing...";
+      btn.disabled = true;
+
+      setTimeout(() => {
+        fetch("/api/payment/process", {
+          method: "POST",
+          body: JSON.stringify({
+            ride_id: currentRideId,
+            rider_id: currentRideData.rider_id,
+            amount: currentRideData.price,
+            method: method
+          })
+        }).then(r => r.json()).then(d => {
+            if(d.success) {
+                showToast("✅ Payment Successful. Sending request...", "success");
+                closePaymentModal();
+                requestCurrentRide();
+            } else {
+                showToast(d.message, "danger");
+            }
+            btn.textContent = "Pay & Request";
+            btn.disabled = false;
+        });
+      }, 1500);
+    }
+
+
+    // ── Cancel Ride ────────────────────────────────────────────────────────
+    function openCancelModal() {
+      document.getElementById("cancel-modal-overlay").classList.remove("hidden");
+      closeRideDetail();
+    }
+    
+    function closeCancelModal() {
+      document.getElementById("cancel-modal-overlay").classList.add("hidden");
+    }
+
+    function confirmCancelRide() {
+      const reason = document.querySelector('input[name="cancel_reason"]:checked').value;
+      const text = document.getElementById("cancel-reason-text").value;
+      
+      fetch("/api/rides/cancel", {
+        method: "POST",
+        body: JSON.stringify({
+          ride_id: currentRideId,
+          reason: reason,
+          reason_text: text
+        })
+      }).then(r=>r.json()).then(d => {
+        if(d.success) {
+          showToast(d.message, "success");
+          closeCancelModal();
+          location.reload();
+        } else {
+          showToast(d.message, "danger");
+        }
+      });
+    }
+
+    // ── GPS Suggestions ────────────────────────────────────────────────────
+    function enableLocationForSuggestions() {
+      if(!navigator.geolocation) { showToast("Geolocation not supported", "danger"); return; }
+      const btn = document.querySelector("#suggested-banner button");
+      btn.textContent = "Locating...";
+      navigator.geolocation.getCurrentPosition(pos => {
+         loadSuggestedRides(pos.coords.latitude, pos.coords.longitude);
+      }, err => {
+         loadSuggestedRides(); 
+      }, {enableHighAccuracy: true});
+    }
+
+    function loadSuggestedRides(lat=null, lng=null) {
+      document.getElementById("suggested-banner").classList.add("hidden");
+      const list = document.getElementById("suggested-rides-list");
+      list.classList.remove("hidden");
+      list.innerHTML = '<div class="skeleton" style="height:100px; width:200px;"></div>';
+
+      const url = (lat !== null && lng !== null) ? "/api/rides/nearby" : "/api/rides/upcoming?minutes=120";
+      const opts = (lat !== null && lng !== null) ? {method: "POST", body: JSON.stringify({lat, lng, radius_km:5})} : {method: "GET"};
+      
+      fetch(url, opts).then(r=>r.json()).then(rides => {
+         if(!rides.length) {
+            list.innerHTML = '<div class="text-muted" style="padding:1rem;">No suggested rides currently.</div>';
+            return;
+         }
+         list.innerHTML = rides.map(r => `
+          <div class="card" style="min-width: 250px; padding: .75rem; cursor:pointer;" onclick="openRideDetail('${r._id}')">
+            <div style="font-size:.7rem; color:var(--brand-primary); font-weight:700; margin-bottom:.25rem; letter-spacing:.5px;">
+              ${(lat !== null && lng !== null) ? '📍 NEAREST' : '⏰ DEPARTING SOON'}
+            </div>
+            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.source} → ${r.destination}</div>
+            <div class="text-sm text-muted mt-1">🕐 ${r.departure_time} &nbsp;•&nbsp; ${r.is_free ? 'FREE' : '₹'+r.price}</div>
+          </div>
+         `).join("");
+      });
+    }
+
+    // ── Refresh Rides ─────────────────────────────────────────────────────────────
+    function refreshRides() {
+      location.reload();
+    }
+
+    // ── Toast Utility ─────────────────────────────────────────────────────────────
+    function showToast(msg, type = "info") {
+      let c = document.getElementById("flash-container");
+      if (!c) {
+        c = document.createElement("div");
+        c.id = "flash-container";
+        c.className = "flash-container";
+        document.body.appendChild(c);
+      }
+      const el = document.createElement("div");
+      el.className = `flash flash-${type}`;
+      el.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.remove()" class="flash-close">&times;</button>`;
+      c.appendChild(el);
+      setTimeout(() => el.remove(), 5000);
+    }
+
+    // ── Tab Management ────────────────────────────────────────────────────────────
+    function switchDashboardTab(tab) {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+
+      document.getElementById(`tab-${tab}-btn`).classList.add("active");
+      document.getElementById(`tab-${tab}`).classList.add("active");
+
+      if (tab === 'history') loadRideHistory();
+    }
+
+    async function loadRideHistory() {
+      const list = document.getElementById("history-list");
+      list.innerHTML = '<div class="skeleton" style="height:100px;"></div>';
+
+      try {
+        const res = await fetch("/api/rides/my-history");
+        const rides = await res.json();
+
+        if (!rides.length) {
+          list.innerHTML = '<div class="empty-state">No rides yet. Post or join a ride to get started 🚗</div>';
+          return;
+        }
+
+        list.innerHTML = rides.map(r => `
+      <div class="ride-card read-only">
+        <div>
+          <div class="ride-route">
+            <span>${r.source}</span>
+            <span class="ride-route-arrow">→</span>
+            <span>${r.destination}</span>
+          </div>
+          <div class="ride-meta">
+            <span class="ride-meta-badge">📅 ${r.departure_time}</span>
+            <span class="ride-meta-badge">🏷️ ${r.active ? 'Active' : 'Completed'}</span>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="text-sm text-muted">Rider: ${r.rider_name || 'You'}</div>
+          <div class="text-sm text-muted">${r.accepted_riders ? r.accepted_riders.length : 0} co-riders</div>
+        </div>
+      </div>
+    `).join("");
+      } catch {
+        list.innerHTML = '<p class="text-danger">Failed to load history.</p>';
+      }
+    }
+
+    // ── Live Tracking & Geolocation ────────────────────────────────────────────────
+    let trackingMap = null;
+    let trackingMarker = null;
+    let watchId = null;
+    let isSharing = false;
+
+    function openTrackingModal(rideId) {
+      currentRideId = rideId;
+      document.getElementById("tracking-modal-overlay").classList.remove("hidden");
+
+      // Initialize Map if not done
+      if (!trackingMap) {
+        trackingMap = L.map('tracking-map').setView([19.0543, 72.8402], 15); // Default Mumbai/BKC
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(trackingMap);
+      }
+
+      const info = document.getElementById("tracking-info");
+      info.innerHTML = `<div class="text-sm">Connecting to ride <strong>${rideId}</strong>...</div>`;
+
+      // Set share button visibility
+      const isOwner = currentRideData && currentRideData.rider_id === window.MET.userId;
+      document.getElementById("tracking-share-btn").classList.toggle("hidden", !isOwner);
+
+      socket.emit("join_ride", { ride_id: rideId });
+    }
+
+    function closeTrackingModal() {
+      document.getElementById("tracking-modal-overlay").classList.add("hidden");
+    }
+
+    function toggleLocationSharing() {
+      const btn = document.getElementById("tracking-share-btn");
+      if (!isSharing) {
+        if (!navigator.geolocation) return alert("Geolocation not supported.");
+
+        isSharing = true;
+        btn.textContent = "📍 Stop Sharing Location";
+        btn.classList.replace("btn-secondary", "btn-danger");
+
+        watchId = navigator.geolocation.watchPosition((pos) => {
+          const { latitude, longitude } = pos.coords;
+          socket.emit("send_location", {
+            ride_id: currentRideId,
+            lat: latitude,
+            lng: longitude
+          });
+
+          // Also update own map
+          updateTrackingMarker(latitude, longitude, "You (Rider)");
+        }, (err) => console.error(err), { enableHighAccuracy: true });
+
+      } else {
+        stopSharing();
+      }
+    }
+
+    function stopSharing() {
+      const btn = document.getElementById("tracking-share-btn");
+      isSharing = false;
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      btn.textContent = "📍 Start Sharing Location";
+      btn.classList.replace("btn-danger", "btn-secondary");
+    }
+
+    function updateTrackingMarker(lat, lng, label) {
+      if (!trackingMap) return;
+      const pos = [lat, lng];
+      if (!trackingMarker) {
+        trackingMarker = L.marker(pos).addTo(trackingMap).bindPopup(label).openPopup();
+      } else {
+        trackingMarker.setLatLng(pos).getPopup().setContent(label);
+      }
+      trackingMap.panTo(pos);
+      document.getElementById("tracking-info").innerHTML = `
+    <div class="text-sm">📍 Last updated: ${new Date().toLocaleTimeString()}</div>
+    <div class="text-xs text-muted">Tracking: ${label}</div>
+  `;
+    }
+
+    // Socket Listeners for Tracking
+    socket.on("receive_location", (data) => {
+      if (data.ride_id === currentRideId) {
+        updateTrackingMarker(data.lat, data.lng, "Driver (Live)");
+      }
+    });
+
+    socket.on("ride_completed", (data) => {
+      if (data.ride_id === currentRideId) {
+        stopSharing();
+        closeTrackingModal();
+        document.getElementById("completion-modal-overlay").classList.remove("hidden");
+      }
+    });
+
+    // Dismiss modal on click-outside
+    document.getElementById("tracking-modal-overlay").addEventListener("click", function (e) {
+      if (e.target === this) closeTrackingModal();
+    });
+
+    // ── FEATURE 1 & 4 ───────────────────────────────────────────────────────────
+    const statCache = {};
+    const statEndpoints = {
+      'active-rides': '/api/stats/active-riders',
+      'fuel-saved':   '/api/stats/fuel-saved',
+      'riders-online':'/api/stats/online-riders',
+      'my-rating':    '/api/stats/my-rating'
+    };
+
+    function toggleStatCard(id) {
+      const panel = document.getElementById('detail-' + id);
+      if (!panel) return;
+      const isOpen = !panel.classList.contains('hidden');
+      document.querySelectorAll('.stat-detail-panel').forEach(p => p.classList.add('hidden'));
+      if (isOpen) return;
+      panel.classList.remove('hidden');
+      
+      const now = Date.now();
+      if (statCache[id] && (now - statCache[id].ts) < 60000) {
+        renderStatPanel(id, panel, statCache[id].data);
+        return;
+      }
+      
+      panel.innerHTML = '<div class="stat-detail-loading"><div class="notif-skeleton"></div><div class="notif-skeleton"></div></div>';
+      fetch(statEndpoints[id], { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+          statCache[id] = { data, ts: Date.now() };
+          renderStatPanel(id, panel, data);
+        })
+        .catch(() => { panel.innerHTML = '<div class="text-danger" style="padding:.75rem">Failed to load</div>'; });
+    }
+
+    function renderStatPanel(id, panel, data) {
+      let html = '';
+      if (id === 'active-rides') {
+        html = `<div class="stat-detail-header">🚗 Active Riders Right Now</div>
+          ${data.length === 0 ? '<div class="text-muted text-sm">No active rides.</div>' : data.map(r => `<div class="stat-detail-row"><span>👤 ${r.name}</span><span>${r.source} → ${r.destination}</span><span>${r.seats_available} seats</span><span>🕐 ${r.departure_time}</span></div>`).join('')}`;
+      } else if (id === 'fuel-saved') {
+        html = `<div class="stat-detail-header">♻️ Environmental Impact</div>
+          <div class="stat-detail-row"><span>Today</span><span>🌿 ${data.today} L saved</span></div>
+          <div class="stat-detail-row"><span>This Week</span><span>🌿 ${data.week} L saved</span></div>
+          <div class="stat-detail-row"><span>This Month</span><span>🌿 ${data.month} L saved</span></div>
+          <div class="stat-detail-row"><span>All Time</span><span>🌿 ${data.all_time} L saved</span></div>
+          <div class="stat-detail-row"><span>CO₂ Avoided</span><span>🌍 ${data.co2_avoided} kg</span></div>`;
+      } else if (id === 'riders-online') {
+        html = `<div class="stat-detail-header">👥 Online Right Now</div>
+          ${data.length === 0 ? '<div class="text-muted text-sm">No one online.</div>' : data.map(u => `<div class="stat-detail-row"><span>${u.is_online ? '🟢' : '🟡'} ${u.name}</span><span class="text-muted">Last seen: ${u.last_seen ? new Date(u.last_seen).toLocaleTimeString() : 'Unknown'}</span></div>`).join('')}`;
+      } else if (id === 'my-rating') {
+        html = `<div class="stat-detail-header">⭐ Your Rating Breakdown</div>
+          <div class="stat-detail-row"><span>Average</span><span>⭐ ${data.average}</span></div>
+          <div class="stat-detail-row"><span>Total Reviews</span><span>${data.total}</span></div>
+          <div class="stat-detail-row">★★★★★ <span>${data.stars_5} reviews</span></div>
+          <div class="stat-detail-row">★★★★☆ <span>${data.stars_4} reviews</span></div>
+          <div class="stat-detail-row">★★★☆☆ <span>${data.stars_3} reviews</span></div>
+          ${data.latest_comment ? `<div class="stat-detail-row" style="flex-direction:column; align-items:flex-start;"><span class="text-muted text-xs">Latest Comment:</span>💬 "${data.latest_comment}"</div>` : ''}`;
+      }
+      panel.innerHTML = html;
+    }
+
+    window.startAutoLocationShare = function(rideId) {
+        currentRideId = rideId;
+        if (!navigator.geolocation) return;
+        if (typeof isSharing !== "undefined") isSharing = true;
+        if (typeof watchId !== "undefined") {
+            if(watchId) navigator.geolocation.clearWatch(watchId);
+            watchId = navigator.geolocation.watchPosition((pos) => {
+                const { latitude, longitude } = pos.coords;
+                socket.emit("send_location", {
+                    ride_id: currentRideId,
+                    lat: latitude,
+                    lng: longitude
+                });
+            }, (err) => console.error(err), { enableHighAccuracy: true });
+        }
+    };
+
+    window.stopAutoLocationShare = function() {
+        if (typeof isSharing !== "undefined") isSharing = false;
+        if (typeof watchId !== "undefined" && watchId) navigator.geolocation.clearWatch(watchId);
+        const banner = document.getElementById("location-sharing-banner");
+        if (banner) banner.classList.add("hidden");
+        const btn = document.getElementById("tracking-share-btn");
+        if (btn) {
+           btn.textContent = "📍 Start Sharing Location";
+           btn.classList.replace("btn-danger", "btn-secondary");
+        }
+    };
+
+    // ── [MET RIDE 2 - NEW FEATURE] OTP Reveal Modal (Passenger Side) ────────────
+    function showOtpRevealModal(data) {
+      document.getElementById("otp-reveal-overlay").classList.remove("hidden");
+      const digits = document.getElementById("otp-glow-digits");
+      if (digits) digits.textContent = data.otp || "----";
+      const info = document.getElementById("otp-reveal-rider-info");
+      if (info) {
+        info.innerHTML = `
+          <span>🚗 <strong>${data.rider_name || "Your Rider"}</strong></span>
+          ${data.vehicle_info ? `<span class="otp-vehicle-badge">${data.vehicle_info}</span>` : ""}`;
+      }
+    }
+
+    // ── [MET RIDE 2 - NEW FEATURE] Driver OTP input widget ──────────────────────
+    // Show the 4-box OTP input, bound to a specific ride
+    function showDriverOtpWidget(rideId) {
+      currentRideId = rideId;
+      const widget = document.getElementById("otp-verify-widget");
+      if (widget) widget.classList.remove("hidden");
+      // Scroll widget into view if it's outside viewport
+      widget?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      initOtpBoxes();
+    }
+    window.showDriverOtpWidget = showDriverOtpWidget;
+
+    // Wire up OTP boxes: auto-advance, backspace, auto-submit
+    function initOtpBoxes() {
+      const boxes = document.querySelectorAll(".otp-box");
+      boxes.forEach((box, idx) => {
+        // Remove old listeners to avoid duplicates on re-init
+        const newBox = box.cloneNode(true);
+        box.parentNode.replaceChild(newBox, box);
+      });
+      // Re-query after clone
+      const freshBoxes = document.querySelectorAll(".otp-box");
+      freshBoxes.forEach((box, idx) => {
+        box.value = "";
+        box.addEventListener("input", (e) => {
+          const val = e.target.value.replace(/\D/g, "");
+          e.target.value = val ? val[0] : "";
+          if (val && idx < freshBoxes.length - 1) freshBoxes[idx + 1].focus();
+          if (freshBoxes.length && [...freshBoxes].every(b => b.value)) submitDriverOtp();
+        });
+        box.addEventListener("keydown", (e) => {
+          if (e.key === "Backspace" && !e.target.value && idx > 0) freshBoxes[idx - 1].focus();
+        });
+        box.addEventListener("paste", (e) => {
+          const pasted = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "");
+          if (pasted.length === 4) {
+            [...freshBoxes].forEach((b, i) => { b.value = pasted[i] || ""; });
+            submitDriverOtp();
+          }
+          e.preventDefault();
+        });
+      });
+      freshBoxes[0]?.focus();
+    }
+
+    async function submitDriverOtp() {
+      const boxes  = document.querySelectorAll(".otp-box");
+      const otp    = [...boxes].map(b => b.value).join("");
+      const errEl  = document.getElementById("otp-verify-error");
+      const btnEl  = document.getElementById("otp-verify-btn");
+      const btnTxt = document.getElementById("otp-verify-btn-text");
+
+      if (otp.length < 4) {
+        errEl.textContent = "Enter all 4 digits.";
+        errEl.classList.remove("hidden");
+        return;
+      }
+      errEl.classList.add("hidden");
+      btnEl.disabled = true;
+      btnTxt.textContent = "Verifying…";
+
+      try {
+        const res  = await fetch("/ride/verify-otp", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ ride_id: currentRideId, otp }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showToast("✅ OTP Verified!", "success");
+          document.getElementById("otp-verify-widget").classList.add("hidden");
+          document.getElementById("otp-verified-state").classList.remove("hidden");
+          showLiveBadge();
+          startDriverGps(currentRideId);
+        } else {
+          errEl.textContent = data.message || "Invalid OTP.";
+          errEl.classList.remove("hidden");
+          // Shake the boxes
+          const row = document.getElementById("otp-boxes-row");
+          row?.classList.add("otp-shake");
+          setTimeout(() => row?.classList.remove("otp-shake"), 500);
+        }
+      } catch {
+        errEl.textContent = "Network error. Try again.";
+        errEl.classList.remove("hidden");
+      } finally {
+        btnEl.disabled = false;
+        btnTxt.textContent = "Verify OTP";
+      }
+    }
+    window.submitDriverOtp = submitDriverOtp;
+
+    // ── [MET RIDE 2 - NEW FEATURE] LIVE Badge ───────────────────────────────────
+    function showLiveBadge() {
+      const badge = document.getElementById("live-tracking-badge");
+      if (badge) badge.classList.remove("hidden");
+    }
+
+    // ── [MET RIDE 2 - NEW FEATURE] Driver GPS Start ─────────────────────────────
+    let driverGpsWatchId = null;
+    function startDriverGps(rideId) {
+      if (driverGpsWatchId) return; // already running
+      if (!navigator.geolocation) {
+        showToast("Geolocation not supported in this browser.", "warning");
+        return;
+      }
+      showToast("📍 Live location sharing started!", "info");
+      const banner = document.getElementById("location-sharing-banner");
+      if (banner) banner.classList.remove("hidden");
+
+      driverGpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          socket.emit("location_update", {
+            ride_id: rideId,
+            lat:     pos.coords.latitude,
+            lng:     pos.coords.longitude,
+          });
+        },
+        (err) => console.warn("[GPS]", err.message),
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+      );
+    }
+
+    // Also expose as openTrackingModal hook: if driver opens tracking and OTP verified, start GPS
+    const _origOpenTracking = window.openTrackingModal;
+    window.openTrackingModal = function(rideId) {
+      _origOpenTracking && _origOpenTracking(rideId);
+      // Inject the driver OTP widget into tracking modal body if user is driver
+      if (currentRideData && currentRideData.rider_id === window.MET?.userId) {
+        const widgetEl  = document.getElementById("otp-verify-widget");
+        const verifiedEl = document.getElementById("otp-verified-state");
+        const trackInfo = document.getElementById("tracking-info");
+        if (trackInfo && widgetEl) {
+          // Move widget into tracking-info area
+          trackInfo.innerHTML = "";
+          if (currentRideData.otp_verified) {
+            trackInfo.appendChild(verifiedEl);
+            verifiedEl.classList.remove("hidden");
+          } else if (currentRideData.otp) {
+            trackInfo.appendChild(widgetEl);
+            widgetEl.classList.remove("hidden");
+            currentRideId = rideId;
+            initOtpBoxes();
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+  .stat-detail-panel {
+    grid-column: 1 / -1;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 1rem;
+    margin-top: -.5rem;
+    animation: slideDown .2s ease;
+  }
+  @keyframes slideDown {
+    from { opacity:0; transform:translateY(-6px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .stat-detail-header { font-weight:600; margin-bottom:.75rem; font-size:.9rem; }
+  .stat-detail-row {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:.4rem 0; border-bottom:1px solid var(--border);
+    font-size:.84rem;
+  }
+  .stat-detail-row:last-child { border-bottom:none; }
+  .stat-card { cursor:pointer; transition: transform .15s; }
+  .stat-card:hover { transform: translateY(-2px); }
+
+  /* [MET RIDE 2 - NEW FEATURE] ── Passenger OTP Reveal Modal ──────────────── */
+  .otp-reveal-modal {
+    background: rgba(10, 10, 20, 0.95);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(0, 255, 136, 0.25);
+    border-radius: 20px;
+    max-width: 420px;
+    width: 92vw;
+    box-shadow: 0 0 60px rgba(0,255,136,0.12), 0 8px 40px rgba(0,0,0,0.6);
+    overflow: hidden;
+    animation: otpModalIn .35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes otpModalIn {
+    from { opacity:0; transform: scale(0.88) translateY(20px); }
+    to   { opacity:1; transform: scale(1)   translateY(0); }
+  }
+  .otp-reveal-header {
+    background: linear-gradient(135deg, rgba(0,255,136,0.12), rgba(0,180,96,0.08));
+    border-bottom: 1px solid rgba(0,255,136,0.15);
+    padding: 1.5rem 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .otp-reveal-check {
+    width: 44px; height: 44px;
+    background: rgba(0,255,136,0.15);
+    border: 2px solid #00FF88;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; color: #00FF88; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .otp-reveal-body {
+    padding: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .otp-rider-info {
+    display: flex; align-items: center; gap: .75rem;
+    font-size: .9rem; color: var(--text-secondary, #aaa);
+    margin-bottom: 1.5rem; flex-wrap: wrap; justify-content: center;
+  }
+  .otp-vehicle-badge {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 99px;
+    padding: 2px 10px;
+    font-size: .78rem;
+  }
+  .otp-label-row {
+    margin-bottom: .5rem;
+  }
+  .otp-label {
+    font-size: .75rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-muted, #888);
+    font-weight: 600;
+  }
+  /* ── The glowing OTP digit display ── */
+  .otp-glow-display {
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: #00FF88;
+    letter-spacing: 0.35em;
+    text-shadow:
+      0 0 10px rgba(0,255,136,0.7),
+      0 0 30px rgba(0,255,136,0.4),
+      0 0 60px rgba(0,255,136,0.2);
+    animation: otpPulse 2.5s ease-in-out infinite;
+    padding: .75rem 1rem;
+    background: rgba(0,255,136,0.06);
+    border: 1px solid rgba(0,255,136,0.18);
+    border-radius: 12px;
+    min-width: 260px;
+    text-align: center;
+  }
+  @keyframes otpPulse {
+    0%, 100% { text-shadow: 0 0 10px rgba(0,255,136,0.7), 0 0 30px rgba(0,255,136,0.4), 0 0 60px rgba(0,255,136,0.2); }
+    50%       { text-shadow: 0 0 18px rgba(0,255,136,0.9), 0 0 50px rgba(0,255,136,0.6), 0 0 90px rgba(0,255,136,0.3); }
+  }
+  .otp-share-hint {
+    font-size: .84rem;
+    color: var(--text-muted, #888);
+    margin: 1.25rem 0 1rem;
+  }
+  .otp-status-row {
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .82rem; color: var(--text-muted, #888);
+  }
+  .otp-waiting-dot {
+    display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #f59e0b;
+    animation: waitPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes waitPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  /* [MET RIDE 2 - NEW FEATURE] ── Driver OTP Input Widget ─────────────────── */
+  .otp-verify-widget {
+    background: rgba(10,10,20,0.7);
+    border: 1px solid rgba(0,255,136,0.2);
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    align-items: center;
+    text-align: center;
+    backdrop-filter: blur(10px);
+  }
+  .otp-verify-header {
+    display: flex; align-items: center; gap: .75rem;
+    width: 100%;
+  }
+  .otp-verify-icon { font-size: 1.5rem; flex-shrink: 0; }
+  .otp-boxes-row {
+    display: flex; gap: .5rem; justify-content: center;
+  }
+  .otp-box {
+    width: 44px; height: 54px;
+    background: rgba(255,255,255,0.04);
+    border: none;
+    border-bottom: 2.5px solid rgba(0,255,136,0.4);
+    border-radius: 6px 6px 0 0;
+    color: #00FF88;
+    font-size: 1.8rem;
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    text-align: center;
+    outline: none;
+    transition: border-color .15s, background .15s;
+    caret-color: #00FF88;
+  }
+  .otp-box:focus {
+    border-bottom-color: #00FF88;
+    background: rgba(0,255,136,0.07);
+  }
+  .otp-verify-error {
+    color: #ef4444;
+    font-size: .82rem;
+    margin: 0;
+  }
+  @keyframes otpShake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60%  { transform: translateX(-6px); }
+    40%, 80%  { transform: translateX(6px); }
+  }
+  .otp-shake { animation: otpShake .4s ease; }
+
+  /* Verified state */
+  .otp-verified-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    padding: 1.25rem;
+    border: 1px solid rgba(0,255,136,0.3);
+    border-radius: 14px;
+    background: rgba(0,255,136,0.06);
+    margin-top: 1rem;
+    text-align: center;
+  }
+  .otp-verified-check {
+    width: 48px; height: 48px;
+    background: rgba(0,255,136,0.15);
+    border: 2px solid #00FF88;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; color: #00FF88;
+  }
+
+  /* [MET RIDE 2 - NEW FEATURE] ── LIVE Pulsing Badge ─────────────────────── */
+  .live-badge {
+    position: fixed;
+    top: 5rem; right: 1.5rem;
+    background: rgba(0,255,136,0.12);
+    border: 1px solid rgba(0,255,136,0.35);
+    color: #00FF88;
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    z-index: 9990;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 0 16px rgba(0,255,136,0.2);
+    animation: liveFadeIn .4s ease;
+  }
+  .live-badge.hidden { display: none; }
+  @keyframes liveFadeIn {
+    from { opacity:0; transform: translateX(20px); }
+    to   { opacity:1; transform: translateX(0); }
+  }
+  .live-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #00FF88;
+    box-shadow: 0 0 6px #00FF88;
+    animation: livePulse 1.4s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity:1; transform: scale(1); box-shadow: 0 0 6px #00FF88; }
+    50%       { opacity:.5; transform: scale(0.75); box-shadow: 0 0 2px #00FF88; }
+  }
+  </style>
+  {% endblock %}

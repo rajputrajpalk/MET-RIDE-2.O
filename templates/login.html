@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Login — MET Ride{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="auth-logo">
+      <div class="auth-logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 17H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v12"/>
+          <path d="M13 17h4M9 17l-2 5M15 17l2 5"/>
+          <circle cx="7.5" cy="17" r="1.5"/><circle cx="16.5" cy="17" r="1.5"/>
+        </svg>
+      </div>
+      <h1 class="auth-title">MET<span style="color:var(--brand-primary)">Ride</span></h1>
+      <p class="auth-subtitle">Carpooling for MET BKC College</p>
+    </div>
+
+    <!-- Tabs: Login | Register | Admin -->
+    <div class="tab-group" role="tablist">
+      <button class="tab-btn active"    id="tab-login-btn"    onclick="switchTab('login')"    role="tab" aria-selected="true">Login</button>
+      <button class="tab-btn"           id="tab-register-btn" onclick="switchTab('register')" role="tab" aria-selected="false">Register</button>
+      <button class="tab-btn tab-btn-admin" id="tab-admin-btn" onclick="switchTab('admin')"  role="tab" aria-selected="false">🛡 Admin</button>
+    </div>
+
+    <!-- ── LOGIN PANEL ── -->
+    <div class="tab-panel active" id="tab-login" role="tabpanel">
+      <form id="login-form" onsubmit="handleLogin(event)" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="login-email">College Email</label>
+          <input class="form-input" type="email" id="login-email" name="email"
+                 placeholder="you@met.edu" autocomplete="email" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="login-password">Password</label>
+          <input class="form-input" type="password" id="login-password" name="password"
+                 placeholder="••••••••" autocomplete="current-password" required />
+        </div>
+        <p class="form-error hidden" id="login-error"></p>
+        <button class="btn btn-primary btn-full btn-lg mt-2" type="submit" id="login-submit">
+          <span class="btn-text">Sign In</span>
+        </button>
+      </form>
+      <p class="text-center mt-2 text-sm text-muted">
+        Don't have an account?
+        <button class="btn btn-ghost btn-sm" onclick="switchTab('register')" style="display:inline-flex">Register</button>
+      </p>
+    </div>
+
+    <!-- ── REGISTER PANEL ── -->
+    <div class="tab-panel" id="tab-register" role="tabpanel">
+      <!-- Step 1: Name + Email -->
+      <div class="otp-step active" id="reg-step-1">
+        <form id="register-form" onsubmit="handleRegister(event)" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="reg-name">Full Name</label>
+            <input class="form-input" type="text" id="reg-name" name="name"
+                   placeholder="Your full name" autocomplete="name" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-email">College Email</label>
+            <input class="form-input" type="email" id="reg-email" name="email"
+                   placeholder="you@met.edu" autocomplete="email" required />
+            <span class="form-help">Must be a MET BKC college email address</span>
+          </div>
+          <p class="form-error hidden" id="register-error"></p>
+          <button class="btn btn-primary btn-full btn-lg mt-2" type="submit" id="register-submit">
+            <span class="btn-text">Send OTP</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- Step 2: OTP + Password -->
+      <div class="otp-step" id="reg-step-2">
+        <div class="otp-display mb-1">
+          📧 OTP sent to <strong id="reg-email-display"></strong>
+          <span id="dev-otp-hint" class="hidden" style="display:block;color:var(--brand-warning);margin-top:.5rem;font-weight:700;font-size:1rem;"></span>
+        </div>
+        <form id="verify-form" onsubmit="handleVerifyOtp(event)" novalidate>
+          <div class="form-group mt-1">
+            <label class="form-label" for="otp-input">Enter OTP</label>
+            <input class="form-input" type="text" id="otp-input" name="otp"
+                   placeholder="6-digit code" maxlength="6" inputmode="numeric" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-password">Create Password</label>
+            <input class="form-input" type="password" id="reg-password" name="password"
+                   placeholder="Min 8 characters" autocomplete="new-password" required />
+            <span class="form-help">At least 8 characters</span>
+          </div>
+          <p class="form-error hidden" id="verify-error"></p>
+          <div style="display:flex;gap:.75rem;" class="mt-2">
+            <button type="button" class="btn btn-ghost" onclick="backToStep1()">Back</button>
+            <button class="btn btn-primary" style="flex:1" type="submit" id="verify-submit">
+              <span class="btn-text">Create Account</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div><!-- /tab-register -->
+
+    <!-- ── ADMIN LOGIN PANEL ── -->
+    <div class="tab-panel" id="tab-admin" role="tabpanel">
+      <div class="admin-login-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <div>
+          <div class="admin-login-banner-title">Administrator Access</div>
+          <div class="admin-login-banner-sub">Restricted to authorised MET Ride admins only.</div>
+        </div>
+      </div>
+      <form id="admin-login-form" onsubmit="handleAdminLogin(event)" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="admin-email">Admin Email</label>
+          <input class="form-input" type="email" id="admin-email" name="email"
+                 placeholder="admin@met.edu" autocomplete="email" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="admin-password">Admin Password</label>
+          <input class="form-input" type="password" id="admin-password" name="password"
+                 placeholder="••••••••" autocomplete="current-password" required />
+        </div>
+        <p class="form-error hidden" id="admin-error"></p>
+        <button class="btn btn-admin btn-full btn-lg mt-2" type="submit" id="admin-submit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span class="btn-text">Sign In as Admin</span>
+        </button>
+      </form>
+      <p class="text-center mt-2 text-sm text-muted">
+        Not an admin?
+        <button class="btn btn-ghost btn-sm" onclick="switchTab('login')" style="display:inline-flex">Back to Login</button>
+      </p>
+    </div><!-- /tab-admin -->
+
+  </div><!-- /auth-card -->
+</div>
+
+<style>
+/* Admin tab button */
+.tab-btn-admin {
+  color: hsl(38, 95%, 65%) !important;
+  font-weight: 700;
+}
+.tab-btn-admin.active {
+  background: rgba(251, 191, 36, 0.12) !important;
+  color: hsl(38, 95%, 65%) !important;
+}
+
+/* Admin banner */
+.admin-login-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--r-md);
+  margin-bottom: 1.25rem;
+}
+.admin-login-banner svg {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  color: hsl(38, 95%, 65%);
+}
+.admin-login-banner-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: hsl(38, 95%, 72%);
+}
+.admin-login-banner-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Admin submit button */
+.btn-admin {
+  background: linear-gradient(135deg, hsl(38, 80%, 48%) 0%, hsl(30, 90%, 52%) 100%);
+  color: white;
+  box-shadow: 0 2px 12px rgba(251, 191, 36, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-admin:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(251, 191, 36, 0.5);
+}
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+/* 3-tab switcher overrides the 2-tab version in auth_logic.js */
+function switchTab(name) {
+  ["login", "register", "admin"].forEach(t => {
+    const panel = document.getElementById("tab-" + t);
+    const btn   = document.getElementById("tab-" + t + "-btn");
+    if (panel) panel.classList.toggle("active", t === name);
+    if (btn) {
+      btn.classList.toggle("active", t === name);
+      btn.setAttribute("aria-selected", t === name);
+    }
+  });
+  ["login-error", "register-error", "verify-error", "admin-error"].forEach(id => {
+    document.getElementById(id)?.classList.add("hidden");
+  });
+}
+
+/* Admin login uses the same /api/login endpoint */
+async function handleAdminLogin(e) {
+  e.preventDefault();
+  const err      = document.getElementById("admin-error");
+  const btn      = document.getElementById("admin-submit");
+  const email    = document.getElementById("admin-email").value.trim();
+  const password = document.getElementById("admin-password").value;
+
+  if (!email || !password) {
+    err.textContent = "Please enter your admin email and password.";
+    err.classList.remove("hidden");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.classList.add("btn-loading");
+  btn.style.position = "relative";
+  err.classList.add("hidden");
+
+  try {
+    const res  = await fetch("/api/login", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      window.location.href = data.redirect || "/admin/";
+    } else {
+      err.textContent = data.message || "Admin login failed. Check credentials.";
+      err.classList.remove("hidden");
+    }
+  } catch {
+    err.textContent = "Network error. Please try again.";
+    err.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("btn-loading");
+    btn.style.position = "";
+  }
+}
+</script>
+{% endblock %}

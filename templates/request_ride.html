@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Find a Ride — MET Ride{% endblock %}
+
+{% block content %}
+<div style="max-width:900px; margin:0 auto;">
+  <div class="dashboard-header">
+    <div>
+      <h1 class="page-title">Find a Ride</h1>
+      <p class="page-subtitle">Browse available rides posted by fellow students.</p>
+    </div>
+    <div style="display:flex;gap:.75rem;">
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input type="text" id="ride-search" placeholder="Search source or destination…"
+          oninput="filterRides(this.value)" />
+      </div>
+    </div>
+  </div>
+
+  {% if rides %}
+  <div class="rides-list" id="all-rides">
+    {% for ride in rides %}
+    <div class="ride-card" data-src="{{ ride.source|lower }}" data-dst="{{ ride.destination|lower }}"
+      id="rf-{{ ride['_id'] }}">
+      <div>
+        <div class="ride-route">
+          <span>{{ ride.source }}</span>
+          <span class="ride-route-arrow">→</span>
+          <span>{{ ride.destination }}</span>
+        </div>
+        <div class="ride-meta">
+          <span class="ride-meta-badge">🕐 {{ ride.departure_time }}</span>
+          <span class="ride-meta-badge">🚘 {{ ride.vehicle_type }}</span>
+          <span class="ride-meta-badge {% if ride.is_free %}free{% endif %}">
+            {% if ride.is_free %}FREE{% else %}₹{{ ride.price }}{% endif %}
+          </span>
+          <span class="ride-meta-badge">👤 {{ ride.rider_name }}</span>
+          {% if ride.get('route_stops') %}
+          <span class="ride-meta-badge">📍 {{ ride.route_stops|join(', ') }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="ride-actions">
+        <span class="seats-badge">{{ ride.seats_available }} seat{{ 's' if ride.seats_available != 1 else '' }}</span>
+        <button class="btn btn-primary btn-sm" id="req-btn-{{ ride['_id'] }}" data-ride-id="{{ ride['_id'] }}"
+          onclick="sendRideRequest(this.dataset.rideId, this)" {% if ride.rider_id==session.get('user_id') %}disabled
+          title="Your own ride" {% endif %}>
+          Request
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state card">
+    <div class="empty-state-icon">🚗</div>
+    <div class="empty-state-title">No rides available right now</div>
+    <p class="text-sm text-muted">Check back soon, or post your own ride!</p>
+    <a href="{{ url_for('ride.post_ride_page') }}" class="btn btn-primary mt-2">Post a Ride</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  function sendRideRequest(rideId, btn) {
+    btn.disabled = true;
+    btn.textContent = "…";
+    fetch(`/api/request-ride/${rideId}`, { method: "POST" })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          btn.textContent = "✓ Requested";
+          btn.classList.replace("btn-primary", "btn-success");
+        } else {
+          btn.disabled = false;
+          btn.textContent = "Request";
+          alert(d.message);
+        }
+      })
+      .catch(() => { btn.disabled = false; btn.textContent = "Request"; });
+  }
+
+  function filterRides(q) {
+    q = q.toLowerCase().trim();
+    document.querySelectorAll(".ride-card[data-src]").forEach(card => {
+      const match = card.dataset.src.includes(q) || card.dataset.dst.includes(q) || q === "";
+      card.style.display = match ? "" : "none";
+    });
+  }
+</script>
+{% endblock %}

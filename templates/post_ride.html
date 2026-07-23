@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Post a Ride — MET Ride{% endblock %}
+
+{% block content %}
+<div style="max-width:680px; margin:0 auto;">
+  <h1 class="page-title">Post a Ride</h1>
+  <p class="page-subtitle">Share your journey and help fellow MET students.</p>
+
+  <div class="card">
+    <form id="post-ride-form" onsubmit="submitPostRide(event)" novalidate>
+
+      <!-- Route -->
+      <div style="display:flex; flex-direction:column; gap:.5rem;">
+        <div class="form-group" style="position:relative;">
+          <label class="form-label" for="pr-source">From (Pickup)</label>
+          <input class="form-input" type="text" id="pr-source" name="source"
+                 placeholder="e.g. Bandra Station" required />
+        </div>
+        
+        <div style="display:flex; align-items:center; justify-content:center; margin:0;" title="Swap source and destination">
+          <button type="button" class="btn btn-ghost btn-sm swap-btn" onclick="swapRouteFields()" style="border-radius:50%; padding:.4rem; font-size:1.2rem; transform-origin:center; z-index:2;">
+            ⇄
+          </button>
+        </div>
+
+        <div class="form-group" style="margin-top:-.5rem;">
+          <label class="form-label" for="pr-dest">To (Drop-off)</label>
+          <input class="form-input" type="text" id="pr-dest" name="destination"
+                 placeholder="e.g. MET BKC" required />
+        </div>
+      </div>
+
+      <!-- Stops -->
+      <div class="form-group">
+        <label class="form-label" for="pr-stops">Stops Along the Way</label>
+        <input class="form-input" type="text" id="pr-stops" name="route_stops"
+               placeholder="e.g. Kurla, Chunabhatti (comma-separated)" />
+        <span class="form-help">Optional. Separate multiple stops with commas.</span>
+      </div>
+
+      <!-- Time & Vehicle -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="form-group">
+          <label class="form-label" for="pr-time">Departure Time</label>
+          <input class="form-input" type="datetime-local" id="pr-time" name="departure_time" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="pr-vehicle">Vehicle Type</label>
+          <select class="form-select" id="pr-vehicle" name="vehicle_type" required>
+            <option value="">Select vehicle</option>
+            <option value="Car">Car</option>
+            <option value="Bike">Bike</option>
+            <option value="Auto">Auto</option>
+            <option value="Van">Van</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Seats & Price -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="form-group">
+          <label class="form-label" for="pr-seats">Seats Available</label>
+          <input class="form-input" type="number" id="pr-seats" name="seats"
+                 min="1" max="8" placeholder="e.g. 3" required />
+        </div>
+        <div class="form-group" id="price-group">
+          <label class="form-label" for="pr-price">Price per Seat (₹)</label>
+          <input class="form-input" type="number" id="pr-price" name="price"
+                 min="0" placeholder="e.g. 50" />
+        </div>
+      </div>
+
+      <!-- Free Ride Toggle -->
+      <div class="form-toggle-group" onclick="toggleFreeRide()" style="margin-bottom:1.1rem;">
+        <span class="form-toggle-label">🌿 Offer this ride for free</span>
+        <label class="toggle-switch" onclick="event.stopPropagation()">
+          <input type="checkbox" id="pr-free" name="is_free" onchange="toggleFreeRide()" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <p class="form-error hidden" id="pr-error"></p>
+
+      <div style="display:flex;gap:.75rem;">
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-ghost">Cancel</a>
+        <button class="btn btn-primary" type="submit" id="pr-submit" style="flex:1;">
+          <span class="btn-text">🚗 Post Ride</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Set minimum datetime to now
+const timeInput = document.getElementById("pr-time");
+const now = new Date();
+now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+timeInput.min = now.toISOString().slice(0, 16);
+
+function swapRouteFields() {
+  const src  = document.getElementById('pr-source');
+  const dest = document.getElementById('pr-dest');
+  if (!src || !dest) return;
+  const tmp  = src.value;
+  src.value  = dest.value;
+  dest.value = tmp;
+  const btn = document.querySelector('.swap-btn');
+  btn.style.transform = 'rotate(180deg)';
+  btn.style.transition = 'transform .3s ease';
+  setTimeout(() => btn.style.transform = 'rotate(0deg)', 400);
+}
+
+function toggleFreeRide() {
+  const isFree     = document.getElementById("pr-free").checked;
+  const priceGroup = document.getElementById("price-group");
+  priceGroup.style.opacity    = isFree ? "0.4" : "1";
+  priceGroup.style.pointerEvents = isFree ? "none" : "auto";
+  if (isFree) document.getElementById("pr-price").value = "0";
+}
+
+async function submitPostRide(e) {
+  e.preventDefault();
+  const err    = document.getElementById("pr-error");
+  const btn    = document.getElementById("pr-submit");
+  const stopsRaw = document.getElementById("pr-stops").value;
+  const stops    = stopsRaw ? stopsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+
+  const payload = {
+    source:         document.getElementById("pr-source").value.trim(),
+    destination:    document.getElementById("pr-dest").value.trim(),
+    departure_time: document.getElementById("pr-time").value,
+    vehicle_type:   document.getElementById("pr-vehicle").value,
+    seats:          document.getElementById("pr-seats").value,
+    price:          document.getElementById("pr-price").value || 0,
+    is_free:        document.getElementById("pr-free").checked,
+    route_stops:    stops,
+  };
+
+  if (!payload.source || !payload.destination || !payload.departure_time || !payload.vehicle_type || !payload.seats) {
+    err.textContent = "Please fill in all required fields.";
+    err.classList.remove("hidden");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.classList.add("btn-loading");
+  err.classList.add("hidden");
+
+  try {
+    const res  = await fetch("/api/post-ride", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.success) {
+      window.location.href = "/dashboard";
+    } else {
+      err.textContent = data.message || "Failed to post ride.";
+      err.classList.remove("hidden");
+    }
+  } catch {
+    err.textContent = "Network error. Please try again.";
+    err.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("btn-loading");
+  }
+}
+</script>
+{% endblock %}

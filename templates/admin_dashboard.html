@@ -1,0 +1,500 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — MET Ride{% endblock %}
+
+{% block content %}
+<!-- Admin Header -->
+<div class="admin-header">
+  <div>
+    <div class="admin-badge" style="margin-bottom:.5rem;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      ADMIN PANEL
+    </div>
+    <h1 class="page-title">Admin Dashboard</h1>
+    <p class="page-subtitle">System overview and user management for MET Ride.</p>
+  </div>
+  <button class="btn btn-secondary btn-sm" onclick="loadAll()">↻ Refresh All</button>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid" id="stats-grid">
+  <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value skeleton" id="s-total" style="height:36px;width:60px;"></div><div class="stat-label">Total Users</div></div>
+  <div class="stat-card"><div class="stat-icon">✓</div><div class="stat-value skeleton" id="s-verified" style="height:36px;width:60px;"></div><div class="stat-label">Verified</div></div>
+  <div class="stat-card"><div class="stat-icon">🚗</div><div class="stat-value skeleton" id="s-active" style="height:36px;width:60px;"></div><div class="stat-label">Active Rides</div></div>
+  <div class="stat-card"><div class="stat-icon">🌿</div><div class="stat-value skeleton" id="s-fuel" style="height:36px;width:80px;"></div><div class="stat-label">Fuel Saved (L)</div></div>
+  <div class="stat-card"><div class="stat-icon">🚨</div><div class="stat-value skeleton" id="s-sos" style="height:36px;width:60px;"></div><div class="stat-label">Active SOS</div></div>
+</div>
+
+<!-- Tabs -->
+<div class="tab-group" style="margin-bottom:1.5rem; max-width:480px;">
+  <button class="tab-btn active" id="tab-users-btn"  onclick="adminTab('users')">Users</button>
+  <button class="tab-btn"        id="tab-rides-btn"  onclick="adminTab('rides')">Rides</button>
+  <button class="tab-btn"        id="tab-alerts-btn" onclick="adminTab('alerts')">SOS Alerts</button>
+  <button class="tab-btn"        id="tab-audit-btn" onclick="adminTab('audit')">Audit Log</button>
+  {% if session.get('role') == 'super_admin' %}
+  <button class="tab-btn"        id="tab-manage-btn" onclick="adminTab('manage')">👑 Management</button>
+  {% endif %}
+</div>
+
+<!-- Users Tab -->
+<div class="tab-panel active" id="tab-users">
+  <div class="section-header">
+    <h2 class="section-title">User Management</h2>
+    <div class="search-bar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="user-search" placeholder="Search name or email…" oninput="searchUsers(this.value)" />
+    </div>
+  </div>
+  <div class="data-table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name / Email</th>
+          <th>Department</th>
+          <th>Status</th>
+          <th>Rating</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="users-tbody">
+        <tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="display:flex;justify-content:center;gap:.75rem;margin-top:1rem;" id="user-pagination"></div>
+</div>
+
+<!-- Rides Tab -->
+<div class="tab-panel" id="tab-rides">
+  <div class="section-header">
+    <h2 class="section-title">All Rides</h2>
+  </div>
+  <div class="data-table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Route</th>
+          <th>Rider</th>
+          <th>Time</th>
+          <th>Seats</th>
+          <th>Price</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="rides-tbody">
+        <tr><td colspan="6" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Alerts Tab -->
+<div class="tab-panel" id="tab-alerts">
+  <div class="section-header">
+    <h2 class="section-title">SOS Alerts</h2>
+    <span class="status-badge status-danger" id="active-sos-count"></span>
+  </div>
+  <div class="data-table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Time</th>
+          <th>Location</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="alerts-tbody">
+        <tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Audit Log Tab -->
+<div class="tab-panel" id="tab-audit">
+  <div class="section-header">
+    <h2 class="section-title">Ride Audit Log</h2>
+    <div style="display:flex;gap:.5rem;">
+        <select class="form-control" id="audit-status" onchange="loadAuditLog()" style="padding:0 .5rem;">
+            <option value="all">All Rides</option>
+            <option value="active">Active Only</option>
+            <option value="completed">Completed Only</option>
+        </select>
+    </div>
+  </div>
+  <div class="data-table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Route</th>
+          <th>Rider</th>
+          <th>Co-riders</th>
+          <th>Price</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="audit-tbody">
+        <tr><td colspan="6" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Management Tab -->
+{% if session.get('role') == 'super_admin' %}
+<div class="tab-panel" id="tab-manage">
+  <div class="section-header">
+    <h2 class="section-title">Admin Management</h2>
+  </div>
+  
+  <div class="card mt-2">
+    <h2 class="section-title">👑 Admin Management</h2>
+    <div class="form-group" style="display:flex;gap:.5rem;">
+      <input type="email" id="admin-search-email" class="form-control" placeholder="user@met.edu" />
+      <button class="btn btn-secondary" onclick="searchUserForAdmin()">Search</button>
+    </div>
+    <div id="admin-search-result" style="margin-top:1rem;"></div>
+  </div>
+
+  <div class="card mt-2">
+    <h2 class="section-title">Current Admins</h2>
+    <div class="data-table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name / Email</th>
+            <th>Role</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="manage-tbody">
+          <tr><td colspan="3" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Join admin SocketIO room
+const socket = io();
+socket.emit("join_admin_room");
+socket.on("connect", () => socket.emit("join_admin_room"));
+
+socket.on("sos_alert", (data) => {
+  // Pulse the tab
+  const btn = document.getElementById("tab-alerts-btn");
+  btn.style.color = "var(--brand-danger)";
+  btn.textContent = "🚨 SOS Alerts";
+  loadAlerts();
+  showAdminToast(`🚨 SOS from ${data.name || data.email}`, "danger");
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+let userPage = 1;
+let userSearch = "";
+
+function loadAll() {
+  loadStats();
+  loadUsers();
+  loadRides();
+  loadAlerts();
+}
+loadAll();
+setInterval(loadStats, 30000);
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function loadStats() {
+  fetch("/admin/api/stats").then(r => r.json()).then(d => {
+    setVal("s-total",   d.total_users);
+    setVal("s-verified", d.verified);
+    setVal("s-active",   d.active_rides);
+    setVal("s-fuel",     d.fuel_saved + " L");
+    setVal("s-sos",      d.sos_active);
+    if (d.sos_active > 0) {
+      document.getElementById("s-sos").style.color = "var(--brand-danger)";
+    }
+  });
+}
+function setVal(id, val) {
+  const el = document.getElementById(id);
+  el.classList.remove("skeleton");
+  el.style.height = "";
+  el.style.width  = "";
+  el.textContent  = val;
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+function loadUsers(page = 1, search = userSearch) {
+  userPage = page;
+  fetch(`/admin/api/users?page=${page}&limit=15&search=${encodeURIComponent(search)}`)
+    .then(r => r.json())
+    .then(d => {
+      const tbody = document.getElementById("users-tbody");
+      if (!d.users.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">No users found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = d.users.map(u => `
+        <tr>
+          <td>
+            <div style="font-weight:600">${u.name || "—"}</div>
+            <div class="text-muted text-sm">${u.email}</div>
+          </td>
+          <td>${u.department || "—"}</td>
+          <td>
+            ${u.is_verified
+              ? '<span class="status-badge status-verified">Verified</span>'
+              : '<span class="status-badge status-pending">Pending</span>'}
+            ${u.is_admin ? '<span class="status-badge status-active" style="margin-left:4px;">Admin</span>' : ""}
+          </td>
+          <td>${u.avg_rating ? "⭐ " + u.avg_rating : "—"}</td>
+          <td>
+            ${!u.is_verified ? `<button class="btn btn-success btn-sm" onclick="verifyUser('${u._id}', this)">Verify</button>` : ""}
+            ${u.id_card_url  ? `<a class="btn btn-ghost btn-sm" href="${u.id_card_url}" target="_blank">ID Card</a>` : ""}
+          </td>
+        </tr>
+      `).join("");
+
+      // Pagination
+      const totalPages = Math.ceil(d.total / 15);
+      const pg = document.getElementById("user-pagination");
+      pg.innerHTML = "";
+      for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement("button");
+        btn.className = `btn btn-sm ${i === page ? "btn-primary" : "btn-ghost"}`;
+        btn.textContent = i;
+        btn.onclick = () => loadUsers(i);
+        pg.appendChild(btn);
+      }
+    });
+}
+
+function searchUsers(val) {
+  userSearch = val;
+  loadUsers(1, val);
+}
+
+function verifyUser(userId, btn) {
+  btn.disabled = true;
+  fetch(`/admin/api/verify-user/${userId}`, { method: "POST" })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        btn.closest("tr").querySelector("td:nth-child(3)").innerHTML =
+          '<span class="status-badge status-verified">Verified</span>';
+        btn.remove();
+        loadStats();
+        showAdminToast("User verified!", "success");
+      } else {
+        btn.disabled = false;
+        showAdminToast(d.message, "danger");
+      }
+    });
+}
+
+// ── Rides ─────────────────────────────────────────────────────────────────────
+function loadRides() {
+  fetch("/admin/api/rides").then(r => r.json()).then(rides => {
+    const tbody = document.getElementById("rides-tbody");
+    if (!rides.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:2rem;">No rides yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rides.map(r => `
+      <tr>
+        <td><strong>${r.source}</strong> → <strong>${r.destination}</strong></td>
+        <td>${r.rider_name}<br><span class="text-muted text-sm">${r.rider_email}</span></td>
+        <td class="text-sm">${r.departure_time || "—"}</td>
+        <td>${r.seats_available ?? "—"} / ${r.seats}</td>
+        <td>${r.is_free ? "FREE" : "₹"+r.price}</td>
+        <td>${r.active
+          ? '<span class="status-badge status-active">Active</span>'
+          : '<span class="status-badge status-resolved">Completed</span>'}</td>
+      </tr>
+    `).join("");
+  });
+}
+
+// ── Alerts ────────────────────────────────────────────────────────────────────
+function loadAlerts() {
+  fetch("/admin/api/alerts").then(r => r.json()).then(alerts => {
+    const tbody = document.getElementById("alerts-tbody");
+    const activeCount = alerts.filter(a => a.status === "active").length;
+    const badge = document.getElementById("active-sos-count");
+    badge.textContent = activeCount > 0 ? activeCount + " Active" : "";
+    badge.style.display = activeCount > 0 ? "" : "none";
+
+    if (!alerts.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">No alerts.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = alerts.map(a => `
+      <tr>
+        <td><strong>${a.name || "?"}</strong><br><span class="text-muted text-sm">${a.email}</span></td>
+        <td class="text-sm">${new Date(a.timestamp).toLocaleString()}</td>
+        <td>${a.lat && a.lng
+          ? `<a href="https://maps.google.com/?q=${a.lat},${a.lng}" target="_blank" class="btn btn-ghost btn-sm">📍 Map</a>`
+          : "—"}</td>
+        <td>${a.status === "active"
+          ? '<span class="status-badge status-danger">Active</span>'
+          : '<span class="status-badge status-resolved">Resolved</span>'}</td>
+        <td>${a.status === "active"
+          ? `<button class="btn btn-success btn-sm" onclick="resolveAlert('${a._id}', this)">Resolve</button>`
+          : ""}</td>
+      </tr>
+    `).join("");
+  });
+}
+
+function resolveAlert(alertId, btn) {
+  btn.disabled = true;
+  fetch(`/admin/api/resolve-alert/${alertId}`, { method: "POST" })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) { loadAlerts(); loadStats(); showAdminToast("Alert resolved.", "success"); }
+      else { btn.disabled = false; }
+    });
+}
+
+// ── Tab Switching ─────────────────────────────────────────────────────────────
+function adminTab(name) {
+  ["users", "rides", "alerts", "audit", "manage"].forEach(t => {
+    const p = document.getElementById(`tab-${t}`);
+    const b = document.getElementById(`tab-${t}-btn`);
+    if (p) p.classList.toggle("active", t === name);
+    if (b) b.classList.toggle("active", t === name);
+  });
+  if (name === "rides")  loadRides();
+  if (name === "alerts") loadAlerts();
+  if (name === "audit")  loadAuditLog();
+  if (name === "manage") loadAdminList();
+}
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+async function loadAuditLog() {
+    const status = document.getElementById("audit-status").value;
+    const res = await fetch(`/admin/api/ride-logs?status=${status}`);
+    const rides = await res.json();
+    const tbody = document.getElementById("audit-tbody");
+    
+    tbody.innerHTML = rides.map(r => `
+        <tr>
+            <td class="text-xs text-muted">${r._id.slice(-6)}</td>
+            <td><strong>${r.source}</strong> → <strong>${r.destination}</strong></td>
+            <td>${r.rider_name}<br><small>${r.rider_email}</small></td>
+            <td>${r.accepted_riders ? r.accepted_riders.length : 0}</td>
+            <td>${r.is_free ? 'FREE' : '₹'+r.price}</td>
+            <td>
+                <span class="status-badge status-${r.active ? 'active' : 'resolved'}">
+                    ${r.active ? 'Active' : 'Completed'}
+                </span>
+            </td>
+        </tr>
+    `).join("") || '<tr><td colspan="6" class="text-center">No logs found</td></tr>';
+}
+
+// ── Role Management ───────────────────────────────────────────────────────────
+async function searchUserForAdmin() {
+  const email = document.getElementById('admin-search-email').value.trim();
+  const res = await fetch('/admin/search-user', {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email})
+  });
+  const d = await res.json();
+  const resultDiv = document.getElementById('admin-search-result');
+  if (d.found) {
+    resultDiv.innerHTML = `
+      <div class="admin-found-user" style="margin-bottom:.5rem; font-size:.9rem;">
+        Found: <strong>${d.name}</strong> (${d.email}) — Role: ${d.role}
+        <input type="hidden" id="grant-user-id" value="${d.user_id}">
+      </div>
+      <div class="form-group" style="margin-top:.75rem">
+        <label class="form-label text-sm">Set Password</label>
+        <input class="form-input" type="password" id="grant-password" placeholder="Min 8 chars">
+        <input class="form-input" type="password" id="grant-confirm" placeholder="Confirm password" style="margin-top:.5rem">
+      </div>
+      <button class="btn btn-primary btn-sm mt-2" onclick="grantAdminAccess()">
+        ✅ Grant Admin Access
+      </button>`;
+  } else {
+    resultDiv.innerHTML = '<p class="text-danger" style="margin:0;">No user found.</p>';
+  }
+}
+
+async function grantAdminAccess() {
+  const user_id  = document.getElementById('grant-user-id').value;
+  const password = document.getElementById('grant-password').value;
+  const confirm  = document.getElementById('grant-confirm').value;
+  if (password !== confirm) { showAdminToast('Passwords do not match', 'danger'); return; }
+  if (password.length < 8)  { showAdminToast('Password min 8 chars', 'danger'); return; }
+  const res = await fetch('/admin/grant-admin', {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({user_id, password, confirm_password: confirm})
+  });
+  const d = await res.json();
+  showAdminToast(d.message, d.success ? 'success' : 'danger');
+  if (d.success) { loadAdminList(); document.getElementById('admin-search-result').innerHTML = ''; }
+}
+
+async function loadAdminList() {
+    const tbody = document.getElementById("manage-tbody");
+    if(!tbody) return;
+    const res = await fetch("/admin/admin-list", { credentials:'same-origin' });
+    const admins = await res.json();
+    
+    tbody.innerHTML = admins.map(a => `
+        <tr>
+            <td>
+                <div style="font-weight:600">${a.name}</div>
+                <div class="text-sm text-muted">${a.email}</div>
+            </td>
+            <td><span class="status-badge status-active">${a.role.toUpperCase()}</span></td>
+            <td>
+                ${a.role !== 'super_admin' ? `<button class="btn btn-ghost btn-sm text-danger" onclick="revokeAdmin('${a._id}')">Revoke</button>` : '—'}
+            </td>
+        </tr>
+    `).join("");
+}
+
+async function revokeAdmin(userId) {
+    if (!confirm("Are you sure you want to revoke admin access?")) return;
+    const res = await fetch("/admin/revoke-admin", {
+        method: "POST", credentials:'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId})
+    });
+    const data = await res.json();
+    showAdminToast(data.message || 'Done', data.success ? "success" : "danger");
+    if (data.success) {
+        loadAdminList();
+    }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showAdminToast(msg, type = "info") {
+  let c = document.getElementById("flash-container");
+  if (!c) {
+    c = document.createElement("div");
+    c.id = "flash-container";
+    c.className = "flash-container";
+    document.body.appendChild(c);
+  }
+  const el = document.createElement("div");
+  el.className = `flash flash-${type}`;
+  el.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.remove()" class="flash-close">&times;</button>`;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+</script>
+{% endblock %}
