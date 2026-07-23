@@ -5,6 +5,7 @@
 
 # Sensitive files
 admin id.txt
+project_description.txt
 
 # Python
 __pycache__/
