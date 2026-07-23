@@ -1,0 +1,13 @@
+MET RIDE 2.0 — PROJECT OVERVIEW
+=================================
+
+MET RIDE 2.0 is a real-time ride-sharing web application built exclusively for the MET BKC college community. It connects students, faculty, and staff who share daily commutes, enabling them to post available seats in their vehicles and request rides from fellow members. The platform is designed to reduce transportation costs, decrease traffic congestion around campus, and promote eco-friendly commuting by maximizing car occupancy.
+
+The application is built using Python Flask for the backend, MongoDB for data storage, and Flask-SocketIO with Eventlet for real-time communication. The frontend uses HTML, CSS, and JavaScript with responsive design to work seamlessly across devices. Key features include secure OTP-based email registration restricted to MET college email domains, real-time ride posting and requesting, live GPS tracking of drivers (gated by a 4-digit OTP verification for safety), in-app chat between driver and passengers, and a comprehensive admin dashboard for system management.
+
+Safety is a core focus. The platform includes a one-tap SOS alert system that broadcasts the user's live location to all admins in real time. The OTP-based ride verification ensures that passengers physically board the correct vehicle before live tracking begins. Additionally, role-based access control separates regular users, admins, and super admins, with the latter able to grant or revoke admin privileges.
+
+From a technical standpoint, the project uses MongoDB geospatial indexes for nearby ride queries, session-based authentication with persistent cookies, and a modular blueprint architecture for clean route separation. The admin dashboard provides real-time statistics on active users, rides, fuel saved, and unresolved SOS alerts.
+
+MET RIDE 2.0 is a complete, production-ready solution for campus-based ride sharing, combining modern web technologies with thoughtful safety mechanisms to create a reliable and trustworthy transportation platform for the MET BKC community.
+
